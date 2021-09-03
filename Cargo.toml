@@ -2,7 +2,7 @@
 name = "path_follower"
 version = "0.1.0"
 edition = "2018"
-authors = ["YdrMaster"]
+authors = ["YdrMaster <ydrml@hotmail.com>"]
 readme = "README.md"
 
 [lib]

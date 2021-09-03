@@ -2,6 +2,8 @@ use internal::{follow, manage, parse_isometry2};
 use internal::follow::{FollowTask, Progress};
 use internal::manage::PathFile;
 
+const HELP: &str = "commands: `<file> << <pose>`, `delete <file>`, `list`, `follow <file> [progress][%]`, `search <pose>`";
+
 fn main() {
     let dir = match parse_dir_from_args() {
         Ok(s) => s,
@@ -11,9 +13,10 @@ fn main() {
         }
     };
     println!("path dir: {:?}", std::fs::canonicalize(&dir).unwrap());
-    println!("commands: `<file> << <pose>`, `delete <file>`, `list`, `follow <file> [progress][%]`");
+    println!("{}", HELP);
 
     let mut file_to_save: Option<PathFile> = None;
+    let mut follow_task: Option<FollowTask> = None;
     loop {
         let mut line = String::new();
         if std::io::stdin().read_line(&mut line).is_err() { break; }
@@ -73,10 +76,36 @@ fn main() {
                             continue;
                         }
                     };
-                let task = FollowTask::new(path, progress);
-                println!("follow \"{}.path\": {}/{}", words[1], task.index, task.poses.len() - 1)
+                follow_task = Some(FollowTask::new(path, progress));
+                println!("follow \"{}.path\": {}", words[1], follow_task.as_ref().unwrap())
             }
-            _ => println!("commands: `<file> << <pose>`, `delete <file>`, `list`, `follow <file> [progress][%]`")
+            // 搜索当前路径
+            "search" => if words.len() == 2 && follow_task.is_some() {
+                match parse_isometry2(words[1]) {
+                    Some(pose) => {
+                        let local = follow_task
+                            .as_mut()
+                            .unwrap()
+                            .search(pose, |delta| {
+                                const LIMIT: f64 = std::f64::consts::FRAC_PI_3;
+                                let len = delta.translation.vector.norm();
+                                let v = delta.translation;
+                                let angle1 = v.y.atan2(v.x);
+                                let angle2 = delta.rotation.angle();
+                                len < 0.5
+                                    && -LIMIT < angle1 && angle1 < LIMIT
+                                    && -LIMIT < angle2 && angle2 < LIMIT
+                            });
+                        print!("L ");
+                        for p in local {
+                            print!("{},{},{} ", p.translation.x, p.translation.y, p.rotation.angle());
+                        }
+                        println!();
+                    }
+                    None => {}
+                }
+            }
+            _ => println!("{}", HELP)
         }
     }
 }
