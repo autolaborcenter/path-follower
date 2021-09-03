@@ -1,6 +1,7 @@
-pub mod manage;
-
 use nalgebra as na;
+
+pub mod manage;
+pub mod follow;
 
 /// 从字符串解析等距映射
 pub fn parse_isometry2(s: &str) -> Option<na::Isometry2<f64>> {

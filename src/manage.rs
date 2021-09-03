@@ -18,14 +18,6 @@ pub fn list_files(dir: &str) -> FileVec {
         .collect())
 }
 
-/// 从文件解析路径
-pub fn parse_path(path: &str) -> std::io::Result<Vec<na::Isometry2<f64>>> {
-    Ok(std::fs::read_to_string(path)?
-        .lines()
-        .filter_map(|l| super::parse_isometry2(l))
-        .collect())
-}
-
 /// 文件列表
 pub struct FileVec(Vec<std::fs::DirEntry>);
 
@@ -54,6 +46,7 @@ pub struct PathFile {
 }
 
 impl PathFile {
+    /// 打开路径文件（用于保存）
     pub fn new(dir: &str, name: &str) -> std::io::Result<PathFile> {
         Ok(PathFile {
             name: name.to_string(),
@@ -64,10 +57,12 @@ impl PathFile {
         })
     }
 
+    /// 判断当前路径文件是否为目标路径文件
     pub fn name_equals(pf: &Option<PathFile>, new: &str) -> bool {
         pf.as_ref().map_or(false, |f| f.name == new)
     }
 
+    /// 将一个点追加到路径文件
     pub fn append(&mut self, pose: &na::Isometry2<f64>) {
         let _ = write!(self.file, "{},{},{}\n", pose.translation.x, pose.translation.y, pose.rotation.angle());
     }
