@@ -2,7 +2,6 @@ use std::fmt::{Display, Formatter};
 use std::str::FromStr;
 
 use nalgebra as na;
-use nalgebra::Isometry2;
 
 use Progress::{Index, Percent};
 
@@ -58,16 +57,16 @@ impl FollowTask {
 
     pub fn search(
         &mut self,
-        pose: Isometry2<f64>,
-        first: fn(&Isometry2<f64>) -> bool,
-    ) -> Vec<Isometry2<f64>> {
+        pose: na::Isometry2<f64>,
+        first: fn(&na::Isometry2<f64>) -> bool,
+    ) -> Vec<na::Isometry2<f64>> {
         let to_robot = pose.inverse();
         let mut it =
             self.poses[self.index..self.poses.len()]
                 .iter()
                 .cloned()
                 .map(|p| to_robot * p);
-        let mut local: Vec<Isometry2<f64>> = vec![];
+        let mut local: Vec<na::Isometry2<f64>> = vec![];
         loop { // 查找局部起始点
             match it.next() {
                 Some(p) =>
@@ -80,7 +79,7 @@ impl FollowTask {
                 None => break,
             }
         }
-        local.append(it.take(40).collect::<Vec<Isometry2<f64>>>().as_mut());
+        local.append(it.take(40).collect::<Vec<na::Isometry2<f64>>>().as_mut());
         return local;
     }
 }
