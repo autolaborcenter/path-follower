@@ -5,5 +5,9 @@ edition = "2018"
 authors = ["YdrMaster"]
 readme = "README.md"
 
+[lib]
+name = "internal"
+path = "src/internal.rs"
+
 [dependencies]
 nalgebra = "*"
