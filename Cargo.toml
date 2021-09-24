@@ -1,13 +1,9 @@
 [package]
-name = "path_follower"
+name = "path-follower"
 version = "0.1.0"
 edition = "2021"
 authors = ["YdrMaster <ydrml@hotmail.com>"]
 readme = "README.md"
-
-[lib]
-name = "internal"
-path = "src/internal.rs"
 
 [dependencies]
 nalgebra = "*"
