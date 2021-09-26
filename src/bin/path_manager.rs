@@ -1,9 +1,7 @@
 use path_follower::Controller;
 
-const HELP: &str = "commands: `<file> << <pose>`, `delete <file>`, `list`, `follow <file> [progress][%]`, `search <pose>`";
-
 fn main() {
-    // 打开一个路径仓库
+    // 从参数中解析路径
     let dir = match std::env::args().skip(1).next() {
         Some(dir) => dir,
         None => {
@@ -11,6 +9,7 @@ fn main() {
             return;
         }
     };
+    // 构造任务控制器
     let mut controller = match Controller::new(dir.as_str()) {
         Ok(r) => r,
         Err(e) => {
@@ -18,8 +17,6 @@ fn main() {
             return;
         }
     };
-    println!("repo dir: {}", controller.path().to_str().unwrap());
-    println!("{}", HELP);
 
     loop {
         let mut line = String::new();

@@ -1,11 +1,7 @@
 ﻿use super::normalize;
 use crate::nameof;
-use na::Isometry2;
-use nalgebra as na;
-use std::f32::consts::PI;
-use std::fs::File;
-use std::io::Write;
-use std::path::PathBuf;
+use nalgebra::Isometry2;
+use std::{f32::consts::PI, fs::File, io::Write, path::PathBuf};
 
 /// 路径文件
 pub struct Task {
@@ -24,7 +20,7 @@ impl Task {
     }
 
     /// 将一个点追加到路径文件
-    pub fn append(&mut self, pose: &na::Isometry2<f32>) {
+    pub fn append(&mut self, pose: &Isometry2<f32>) {
         if let Some(last) = self.last {
             let delta = last * pose;
             // 5cm ~ 20cm

@@ -1,15 +1,12 @@
 pub mod task;
 
-use crate::task::{follow, record};
-use na::Isometry2;
-use nalgebra as na;
+use nalgebra::{Isometry2, Vector2};
 use std::{
     fs::File,
-    io::BufReader,
-    io::Read,
+    io::{BufReader, Read},
     path::{Path, PathBuf},
 };
-use task::Task;
+use task::{follow, record, Task};
 
 /// 任务控制器
 pub struct Controller {
@@ -123,7 +120,7 @@ fn nameof<'a>(path: &'a PathBuf) -> &'a str {
 }
 
 /// 从字符串解析等距映射
-fn parse_isometry2(s: &str) -> Option<na::Isometry2<f32>> {
+fn parse_isometry2(s: &str) -> Option<Isometry2<f32>> {
     let mut i = 0;
     let mut numbers = [0.0; 3];
     for r in s.split(',').map(|s| s.trim().parse::<f32>()) {
@@ -133,8 +130,8 @@ fn parse_isometry2(s: &str) -> Option<na::Isometry2<f32>> {
         numbers[i] = r.unwrap();
         i += 1;
     }
-    Some(na::Isometry2::new(
-        na::Vector2::new(numbers[0], numbers[1]),
+    Some(Isometry2::new(
+        Vector2::new(numbers[0], numbers[1]),
         numbers[2],
     ))
 }
@@ -143,7 +140,7 @@ fn parse_isometry2(s: &str) -> Option<na::Isometry2<f32>> {
 fn test_parse() {
     assert_eq!(
         parse_isometry2("-1,+2,-0"),
-        Some(na::Isometry2::new(na::Vector2::new(-1.0, 2.0), 0.0))
+        Some(Isometry2::new(Vector2::new(-1.0, 2.0), 0.0))
     );
     assert_eq!(parse_isometry2("1,2,3,x"), None);
     assert_eq!(parse_isometry2(""), None);

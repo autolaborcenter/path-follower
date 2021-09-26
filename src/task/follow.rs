@@ -1,6 +1,5 @@
 use super::normalize;
-use na::{Isometry2, Translation2, Vector2};
-use nalgebra as na;
+use nalgebra::{Isometry2, Translation2, Vector2};
 use std::{
     f32::consts::{FRAC_PI_3, PI},
     fmt::{Display, Formatter},
@@ -8,13 +7,12 @@ use std::{
 
 /// 路径跟踪任务
 pub struct Task {
-    poses: Vec<na::Isometry2<f32>>,
+    poses: Vec<Isometry2<f32>>,
     index: usize,
 }
 
 impl Task {
-    ///
-    pub fn new(poses: Vec<na::Isometry2<f32>>) -> Self {
+    pub fn new(poses: Vec<Isometry2<f32>>) -> Self {
         Self { poses, index: 0 }
     }
 
@@ -39,7 +37,7 @@ impl Task {
     }
 
     /// 从某点开始查找并返回路径的一个片段
-    pub fn search<'a>(&'a mut self, pose: &na::Isometry2<f32>) -> Option<PathSegment<'a>> {
+    pub fn search<'a>(&'a mut self, pose: &Isometry2<f32>) -> Option<PathSegment<'a>> {
         let mut segment = PathSegment {
             to_robot: pose.inverse(),
             slice: self.poses.as_slice(),
