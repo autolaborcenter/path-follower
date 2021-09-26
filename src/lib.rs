@@ -1,3 +1,4 @@
+pub mod locator;
 pub mod task;
 
 use nalgebra::{Isometry2, Vector2};

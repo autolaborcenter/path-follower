@@ -6,4 +6,6 @@ authors = ["YdrMaster <ydrml@hotmail.com>"]
 readme = "README.md"
 
 [dependencies]
+rtk-ins570-rs = { path = "../rtk-ins570-rs" }
+pose-filter = { path = "../pose-filter" }
 nalgebra = "*"
