@@ -1,6 +1,7 @@
 pub mod task;
 
 use crate::task::{follow, record};
+use na::Isometry2;
 use nalgebra as na;
 use std::{fs::File, io::BufReader, io::Read, path::PathBuf};
 use task::Task;
@@ -43,6 +44,7 @@ impl Controller {
         }
     }
 
+    /// 从名字构造文件的绝对路径
     fn build_absolute(&self, name: &str) -> PathBuf {
         let mut path = self.repo_path.clone();
         path.push(format!("{}.path", name));
@@ -79,6 +81,27 @@ impl Controller {
             .then(|it| Some(it))
             .finally();
         Ok(())
+    }
+
+    /// 取消任务
+    pub fn stop_task(&mut self) {
+        self.task = None;
+    }
+
+    pub fn put_pose(&mut self, pose: &Isometry2<f32>) {
+        if let Some(ref mut task) = self.task {
+            match task {
+                Task::Record(record) => record.append(pose),
+                Task::Follow(follow) => match follow.search(pose) {
+                    Some(seg) => {
+                        println!("proportion = {}", seg.size_proportion());
+                    }
+                    None => {
+                        eprintln!("The robot is too far away from any node of the path.")
+                    }
+                },
+            }
+        }
     }
 }
 
