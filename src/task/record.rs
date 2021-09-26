@@ -17,7 +17,7 @@ pub struct Task {
 impl Task {
     pub fn new(path: PathBuf) -> std::io::Result<Self> {
         Ok(Self {
-            file: File::open(&path)?,
+            file: File::create(&path)?,
             path,
             last: None,
         })

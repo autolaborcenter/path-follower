@@ -3,7 +3,12 @@ pub mod task;
 use crate::task::{follow, record};
 use na::Isometry2;
 use nalgebra as na;
-use std::{fs::File, io::BufReader, io::Read, path::PathBuf};
+use std::{
+    fs::File,
+    io::BufReader,
+    io::Read,
+    path::{Path, PathBuf},
+};
 use task::Task;
 
 /// 任务控制器
@@ -24,6 +29,11 @@ impl Controller {
             repo_path,
             task: None,
         })
+    }
+
+    /// 获取仓库路径
+    pub fn path<'a>(&'a self) -> &'a Path {
+        self.repo_path.as_path()
     }
 
     /// 列出仓库中的路径文件
@@ -88,6 +98,7 @@ impl Controller {
         self.task = None;
     }
 
+    /// （向任务）传入位姿
     pub fn put_pose(&mut self, pose: &Isometry2<f32>) {
         if let Some(ref mut task) = self.task {
             match task {

@@ -13,6 +13,7 @@ pub struct Task {
 }
 
 impl Task {
+    ///
     pub fn new(poses: Vec<na::Isometry2<f32>>) -> Self {
         Self { poses, index: 0 }
     }
