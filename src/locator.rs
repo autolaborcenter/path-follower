@@ -1,4 +1,5 @@
 ﻿use nalgebra::{Isometry2, Vector2};
+use pose_filter::{InterpolationAndPredictionFilter, PoseFilter, PoseType};
 use rtk_ins570_rs::{ins570, rtk_threads, RTKThreads};
 use std::{
     sync::mpsc::*,
@@ -7,13 +8,18 @@ use std::{
 };
 
 pub struct Locator {
-    receiver: Receiver<(Instant, Isometry2<f32>)>,
+    filter: InterpolationAndPredictionFilter,
+    receiver: Receiver<(PoseType, Instant, Isometry2<f32>)>,
 }
 
 impl Locator {
     pub fn new() -> Self {
+        let (sender, receiver) = channel::<(PoseType, Instant, Isometry2<f32>)>();
+        launch_rtk(sender.clone());
+        launch_odometry(sender);
         Self {
-            receiver: launch_rtk(),
+            filter: InterpolationAndPredictionFilter::new(),
+            receiver,
         }
     }
 }
@@ -22,13 +28,14 @@ impl Iterator for Locator {
     type Item = Isometry2<f32>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.receiver.recv().ok().and_then(|pair| Some(pair.1))
+        self.receiver
+            .recv()
+            .ok()
+            .and_then(|(t, time, pose)| Some(self.filter.update(t, time, pose)))
     }
 }
 
-fn launch_rtk() -> Receiver<(Instant, Isometry2<f32>)> {
-    let (sender, receiver) = channel::<(Instant, Isometry2<f32>)>();
-
+fn launch_rtk(sender: Sender<(PoseType, Instant, Isometry2<f32>)>) {
     thread::spawn(move || loop {
         let sender = sender.clone();
         rtk_threads!(move |_, rtk| {
@@ -45,6 +52,7 @@ fn launch_rtk() -> Receiver<(Instant, Isometry2<f32>)> {
                         } = state;
                         if state_pos >= 40 && state_dir >= 40 {
                             let _ = sender.send((
+                                PoseType::Absolute,
                                 now,
                                 Isometry2::new(
                                     Vector2::new(enu.e as f32, enu.n as f32),
@@ -59,6 +67,6 @@ fn launch_rtk() -> Receiver<(Instant, Isometry2<f32>)> {
         .join();
         std::thread::sleep(Duration::from_secs(1));
     });
-
-    receiver
 }
+
+fn launch_odometry(sender: Sender<(PoseType, Instant, Isometry2<f32>)>) {}
