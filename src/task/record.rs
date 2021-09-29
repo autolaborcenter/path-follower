@@ -33,13 +33,14 @@ impl Task {
             }
         }
         self.last = Some(pose.inverse());
-        let _ = write!(
-            self.file,
-            "{},{},{}\n",
+        let text = format!(
+            "{},{},{}",
             pose.translation.x,
             pose.translation.y,
             pose.rotation.angle()
         );
+        let _ = write!(self.file, "{}\n", text);
+        println!("saved: {}", text);
     }
 
     /// 打开的文件名
