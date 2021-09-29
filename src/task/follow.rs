@@ -100,7 +100,8 @@ impl PathSegment<'_> {
         let o = Vector2::new(X, 0.0);
 
         let key_nodes: Vec<_> = self
-            .map_while(|p| {
+            // map_while (unstable)
+            .map(|p| {
                 let vector = p.translation.vector - o;
                 if vector.norm_squared() < R_SQUARED {
                     Some(Isometry2 {
@@ -111,6 +112,8 @@ impl PathSegment<'_> {
                     None
                 }
             })
+            .take_while(|o| o.is_some())
+            .map(|o| o.unwrap())
             .collect();
         let head = intersection(key_nodes.first().unwrap(), R_SQUARED, true);
         let tail = intersection(key_nodes.last().unwrap(), R_SQUARED, false);
