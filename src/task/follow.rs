@@ -7,28 +7,33 @@ use std::{
 
 /// 路径跟踪任务
 pub struct Task {
-    poses: Vec<Isometry2<f32>>,
+    path: Vec<Isometry2<f32>>,
     index: usize,
+    light_radius: f32,
 }
 
 impl Task {
-    pub fn new(poses: Vec<Isometry2<f32>>) -> Self {
-        Self { poses, index: 0 }
+    pub fn new(path: Vec<Isometry2<f32>>) -> Self {
+        Self {
+            path,
+            index: 0,
+            light_radius: 1.0,
+        }
     }
 
     /// 路径长度
     pub fn len(&self) -> usize {
-        self.poses.len()
+        self.path.len()
     }
 
     /// 跳过一些点
     pub fn jump(&mut self, len: usize) {
-        self.index = (self.index + len) % self.poses.len();
+        self.index = (self.index + len) % self.path.len();
     }
 
     /// 跳到一个点
     pub fn jump_to(&mut self, index: usize) -> Result<(), &str> {
-        if index < self.poses.len() {
+        if index < self.path.len() {
             self.index = index;
             Ok(())
         } else {
@@ -40,9 +45,10 @@ impl Task {
     pub fn search<'a>(&'a mut self, pose: &Isometry2<f32>) -> Option<PathSegment<'a>> {
         let mut segment = PathSegment {
             to_robot: pose.inverse(),
-            slice: self.poses.as_slice(),
+            slice: self.path.as_slice(),
             index: self.index,
             may_loop: false,
+            light_radius: self.light_radius,
         };
         loop {
             // 查找局部起始点
@@ -51,7 +57,10 @@ impl Task {
                     let dir = p.rotation.angle();
                     let pos = p.translation.vector;
                     let pos_dir = pos.y.atan2(pos.x);
-                    if dir.abs() < FRAC_PI_3 && pos_dir.abs() < FRAC_PI_3 && pos.norm() < 1.0 {
+                    if dir.abs() < FRAC_PI_3
+                        && pos_dir.abs() < FRAC_PI_3
+                        && pos.norm() < self.light_radius
+                    {
                         break;
                     } else {
                         segment.next();
@@ -60,7 +69,6 @@ impl Task {
                 None => return None,
             }
         }
-        segment.index -= 1;
         self.index = segment.index;
         Some(segment)
     }
@@ -71,9 +79,9 @@ impl Display for Task {
         write!(
             f,
             "{}%({}/{})",
-            (self.index * 100 / (self.poses.len() - 1)),
+            (self.index * 100 / (self.path.len() - 1)),
             self.index,
-            self.poses.len() - 1
+            self.path.len() - 1
         )
     }
 }
@@ -84,6 +92,7 @@ pub struct PathSegment<'a> {
     slice: &'a [Isometry2<f32>],
     index: usize,
     may_loop: bool,
+    light_radius: f32,
 }
 
 impl PathSegment<'_> {
@@ -94,16 +103,15 @@ impl PathSegment<'_> {
     }
 
     pub fn size_proportion(self) -> f32 {
-        const X: f32 = 1.0;
-        const R: f32 = 1.0;
-        const R_SQUARED: f32 = R * R;
-        let o = Vector2::new(X, 0.0);
+        const C: f32 = 1.0;
+        let r_squared: f32 = self.light_radius * self.light_radius;
+        let o = Vector2::new(C, 0.0);
 
         let key_nodes: Vec<_> = self
             // map_while (unstable)
             .map(|p| {
                 let vector = p.translation.vector - o;
-                if vector.norm_squared() < R_SQUARED {
+                if vector.norm_squared() < r_squared {
                     Some(Isometry2 {
                         translation: Translation2 { vector },
                         ..p
@@ -115,8 +123,8 @@ impl PathSegment<'_> {
             .take_while(|o| o.is_some())
             .map(|o| o.unwrap())
             .collect();
-        let head = intersection(key_nodes.first().unwrap(), R_SQUARED, true);
-        let tail = intersection(key_nodes.last().unwrap(), R_SQUARED, false);
+        let head = intersection(key_nodes.first().unwrap(), r_squared, true);
+        let tail = intersection(key_nodes.last().unwrap(), r_squared, false);
         normalize(angle_of(tail) - angle_of(head), 0.0..2.0 * PI) / (2.0 * PI)
     }
 }
@@ -126,14 +134,13 @@ impl Iterator for PathSegment<'_> {
     type Item = Isometry2<f32>;
 
     fn next(&mut self) -> Option<Self::Item> {
+        self.index += 1;
         if self.index == self.slice.len() {
             if self.may_loop {
                 self.index = 0;
             } else {
                 return None;
             }
-        } else {
-            self.index += 1;
         }
         Some(self.to_robot * self.slice[self.index])
     }
