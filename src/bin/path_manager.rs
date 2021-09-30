@@ -1,6 +1,7 @@
 use nalgebra::Isometry2;
-use path_follower::{locator, Controller};
-use std::sync::mpsc::*;
+use path_follower::{controller::Controller, launch_rtk};
+use pose_filter::{InterpolationAndPredictionFilter, PoseFilter};
+use std::sync::{mpsc::*, Arc, Mutex};
 
 enum Message {
     Pose(Isometry2<f32>),
@@ -30,7 +31,10 @@ fn main() {
     };
     // 构造程序消息队列
     let (sender, receiver) = sync_channel::<Message>(0);
+    // 插值滤波器
+    let filter = Arc::new(Mutex::new(InterpolationAndPredictionFilter::new()));
 
+    // 控制台
     let console = sender.clone();
     std::thread::spawn(move || loop {
         let mut line = String::new();
@@ -67,10 +71,14 @@ fn main() {
         };
     });
 
+    // rtk
     let module = sender;
     std::thread::spawn(move || {
-        let locator = locator::Locator::new();
-        for pose in locator {
+        for (time, pose) in launch_rtk() {
+            let pose = filter
+                .lock()
+                .unwrap()
+                .update(pose_filter::PoseType::Absolute, time, pose);
             let _ = module.send(Message::Pose(pose));
         }
     });
