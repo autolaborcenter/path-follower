@@ -1,11 +1,13 @@
-use nalgebra::Isometry2;
-use path_follower::{controller::Controller, launch_rtk};
+use driver::{Driver, DriverHandle, Module};
+use nalgebra::{Isometry2, Vector2};
+use path_follower::controller::Controller;
 use pm1_control_model::Physical;
 use pm1_sdk::{
-    find_pm1,
     pm1::{odometry::Odometry, PM1Event},
+    PM1Threads,
 };
 use pose_filter::{InterpolationAndPredictionFilter, PoseFilter, PoseType};
+use rtk_ins570_rs::{ins570::*, RTKThreads};
 use std::sync::{mpsc::*, Arc, Mutex};
 
 enum Message {
@@ -76,24 +78,41 @@ fn main() {
         };
     });
 
-    {
+    if let Some(rtk) = RTKThreads::open_all(1).into_iter().next() {
         let sender = sender.clone();
         let filter = filter.clone();
         std::thread::spawn(move || {
-            for (time, pose) in launch_rtk() {
-                let pose = filter
-                    .lock()
-                    .unwrap()
-                    .update(PoseType::Absolute, time, pose);
-                let _ = sender.send(Message::Pose(pose));
+            for (time, event) in rtk {
+                match event {
+                    Solution::Uninitialized(_) => {}
+                    Solution::Data(data) => {
+                        let SolutionData { state, enu, dir } = data;
+                        let SolutionState {
+                            state_pos,
+                            satellites: _,
+                            state_dir,
+                        } = state;
+                        if state_pos >= 40 && state_dir >= 40 {
+                            let pose = filter.lock().unwrap().update(
+                                PoseType::Absolute,
+                                time,
+                                Isometry2::new(
+                                    Vector2::new(enu.e as f32, enu.n as f32),
+                                    dir as f32,
+                                ),
+                            );
+                            let _ = sender.send(Message::Pose(pose));
+                        }
+                    }
+                }
             }
         });
     }
 
-    let handle = if let Some(pm1) = find_pm1!() {
+    let handle = if let Some(pm1) = PM1Threads::open_all(1).into_iter().next() {
         let sender = sender;
         let filter = filter;
-        let handle = pm1.get_handle();
+        let handle = pm1.handle();
         std::thread::spawn(move || {
             for (time, event) in pm1 {
                 if let PM1Event::Odometry(Odometry { s: _, a: _, pose }) = event {
@@ -114,7 +133,7 @@ fn main() {
         match msg {
             Message::Pose(pose) => {
                 if let Some(proportion) = controller.put_pose(&pose) {
-                    handle.set_target(Physical {
+                    handle.send(Physical {
                         speed: 0.1,
                         rudder: 2.0 * (proportion - 0.5),
                     });
