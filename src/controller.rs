@@ -96,20 +96,20 @@ impl Controller {
     }
 
     /// （向任务）传入位姿
-    pub fn put_pose(&mut self, pose: &Isometry2<f32>) {
-        if let Some(ref mut task) = self.task {
-            match task {
-                Task::Record(record) => record.append(pose),
-                Task::Follow(follow) => match follow.search(pose) {
-                    Some(seg) => {
-                        println!("proportion = {}", seg.size_proportion());
-                    }
-                    None => {
-                        eprintln!("The robot is too far away from any node of the path.")
-                    }
-                },
+    pub fn put_pose(&mut self, pose: &Isometry2<f32>) -> Option<f32> {
+        self.task.as_mut().and_then(|ref mut task| match task {
+            Task::Record(record) => {
+                record.append(pose);
+                None
             }
-        }
+            Task::Follow(follow) => match follow.search(pose) {
+                Some(seg) => Some(seg.size_proportion()),
+                None => {
+                    eprintln!("The robot is too far away from any node of the path.");
+                    None
+                }
+            },
+        })
     }
 }
 

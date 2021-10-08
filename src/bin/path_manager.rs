@@ -1,6 +1,11 @@
 use nalgebra::Isometry2;
 use path_follower::{controller::Controller, launch_rtk};
-use pose_filter::{InterpolationAndPredictionFilter, PoseFilter};
+use pm1_control_model::Physical;
+use pm1_sdk::{
+    find_pm1,
+    pm1::{odometry::Odometry, PM1Event},
+};
+use pose_filter::{InterpolationAndPredictionFilter, PoseFilter, PoseType};
 use std::sync::{mpsc::*, Arc, Mutex};
 
 enum Message {
@@ -71,21 +76,50 @@ fn main() {
         };
     });
 
-    // rtk
-    let module = sender;
-    std::thread::spawn(move || {
-        for (time, pose) in launch_rtk() {
-            let pose = filter
-                .lock()
-                .unwrap()
-                .update(pose_filter::PoseType::Absolute, time, pose);
-            let _ = module.send(Message::Pose(pose));
-        }
-    });
+    {
+        let sender = sender.clone();
+        let filter = filter.clone();
+        std::thread::spawn(move || {
+            for (time, pose) in launch_rtk() {
+                let pose = filter
+                    .lock()
+                    .unwrap()
+                    .update(PoseType::Absolute, time, pose);
+                let _ = sender.send(Message::Pose(pose));
+            }
+        });
+    }
+
+    let handle = if let Some(pm1) = find_pm1!() {
+        let sender = sender;
+        let filter = filter;
+        let handle = pm1.get_handle();
+        std::thread::spawn(move || {
+            for (time, event) in pm1 {
+                if let PM1Event::Odometry(Odometry { s: _, a: _, pose }) = event {
+                    let pose = filter
+                        .lock()
+                        .unwrap()
+                        .update(PoseType::Relative, time, pose);
+                    let _ = sender.send(Message::Pose(pose));
+                }
+            }
+        });
+        handle
+    } else {
+        return;
+    };
 
     for msg in receiver {
         match msg {
-            Message::Pose(pose) => controller.put_pose(&pose),
+            Message::Pose(pose) => {
+                if let Some(proportion) = controller.put_pose(&pose) {
+                    handle.set_target(Physical {
+                        speed: 0.1,
+                        rudder: 2.0 * (proportion - 0.5),
+                    });
+                }
+            }
             Message::List => {
                 for name in controller.list() {
                     println!("{}", name);
