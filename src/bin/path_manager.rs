@@ -8,7 +8,10 @@ use pm1_sdk::{
 };
 use pose_filter::{InterpolationAndPredictionFilter, PoseFilter, PoseType};
 use rtk_ins570_rs::{ins570::*, RTKThreads};
-use std::sync::{mpsc::*, Arc, Mutex};
+use std::{
+    sync::{mpsc::*, Arc, Mutex},
+    time::Instant,
+};
 
 enum Message {
     Pose(Isometry2<f32>),
@@ -82,43 +85,51 @@ fn main() {
         let sender = sender.clone();
         let filter = filter.clone();
         std::thread::spawn(move || {
-            while rtk.wait(|_, time, event| match event {
-                Solution::Uninitialized(_) => {}
-                Solution::Data(data) => {
-                    let SolutionData { state, enu, dir } = data;
-                    let SolutionState {
-                        state_pos,
-                        satellites: _,
-                        state_dir,
-                    } = state;
-                    if state_pos >= 40 && state_dir >= 40 {
-                        let pose = filter.lock().unwrap().update(
-                            PoseType::Absolute,
-                            time,
-                            Isometry2::new(Vector2::new(enu.e as f32, enu.n as f32), dir as f32),
-                        );
-                        let _ = sender.send(Message::Pose(pose));
+            while rtk.join(|_, event| {
+                let (time, event) = event.unwrap();
+                match event {
+                    Solution::Uninitialized(_) => {}
+                    Solution::Data(data) => {
+                        let SolutionData { state, enu, dir } = data;
+                        let SolutionState {
+                            state_pos,
+                            satellites: _,
+                            state_dir,
+                        } = state;
+                        if state_pos >= 40 && state_dir >= 30 {
+                            let pose = filter.lock().unwrap().update(
+                                PoseType::Absolute,
+                                time,
+                                Isometry2::new(
+                                    Vector2::new(enu.e as f32, enu.n as f32),
+                                    dir as f32,
+                                ),
+                            );
+                            let _ = sender.send(Message::Pose(pose));
+                        }
                     }
                 }
+                true
             }) {}
         });
     }
 
-    let target = Arc::new(Mutex::new(Physical::RELEASED));
+    let target = Arc::new(Mutex::new((Instant::now(), Physical::RELEASED)));
     if let Some(mut pm1) = PM1Threads::open_all(1).into_iter().next() {
         let sender = sender;
         let filter = filter;
         let target = target.clone();
         std::thread::spawn(move || {
-            while pm1.wait(|chassis, time, event| {
-                if let PM1Event::Odometry(Odometry { s: _, a: _, pose }) = event {
-                    chassis.send(*target.lock().unwrap());
+            while pm1.join(|chassis, event| {
+                chassis.send(*target.lock().unwrap());
+                if let Some((time, PM1Event::Odometry(Odometry { s: _, a: _, pose }))) = event {
                     let pose = filter
                         .lock()
                         .unwrap()
                         .update(PoseType::Relative, time, pose);
                     let _ = sender.send(Message::Pose(pose));
                 }
+                true
             }) {}
         });
     }
@@ -127,10 +138,13 @@ fn main() {
         match msg {
             Message::Pose(pose) => {
                 if let Some(proportion) = controller.put_pose(&pose) {
-                    *target.lock().unwrap() = Physical {
-                        speed: 0.1,
-                        rudder: 2.0 * (proportion - 0.5),
-                    };
+                    *target.lock().unwrap() = (
+                        Instant::now(),
+                        Physical {
+                            speed: 0.25,
+                            rudder: -2.0 * (proportion - 0.5),
+                        },
+                    );
                 }
             }
             Message::List => {
