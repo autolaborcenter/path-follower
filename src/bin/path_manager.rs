@@ -1,16 +1,17 @@
-use driver::{Driver, Module};
+use driver::{Driver, SupersivorEventForSingle::*, SupervisorForSingle};
 use nalgebra::{Isometry2, Vector2};
 use path_follower::controller::Controller;
 use pm1_control_model::Physical;
 use pm1_sdk::{
     pm1::{odometry::Odometry, PM1Event},
-    PM1Threads,
+    PM1Supervisor,
 };
 use pose_filter::{InterpolationAndPredictionFilter, PoseFilter, PoseType};
-use rtk_ins570_rs::{ins570::*, RTKThreads};
+use rtk_ins570_rs::{ins570::*, RTKSupersivor};
 use std::{
     sync::{mpsc::*, Arc, Mutex},
-    time::Instant,
+    thread,
+    time::{Duration, Instant},
 };
 
 enum Message {
@@ -81,56 +82,81 @@ fn main() {
         };
     });
 
-    if let Some(mut rtk) = RTKThreads::open_all(1).into_iter().next() {
+    {
         let sender = sender.clone();
         let filter = filter.clone();
-        std::thread::spawn(move || {
-            while rtk.join(|_, event| {
-                let (time, event) = event.unwrap();
-                match event {
-                    Solution::Uninitialized(_) => {}
-                    Solution::Data(data) => {
-                        let SolutionData { state, enu, dir } = data;
-                        let SolutionState {
-                            state_pos,
-                            satellites: _,
-                            state_dir,
-                        } = state;
-                        if state_pos >= 40 && state_dir >= 30 {
-                            let pose = filter.lock().unwrap().update(
-                                PoseType::Absolute,
-                                time,
-                                Isometry2::new(
-                                    Vector2::new(enu.e as f32, enu.n as f32),
-                                    dir as f32,
-                                ),
-                            );
-                            let _ = sender.send(Message::Pose(pose));
-                        }
+        thread::spawn(move || {
+            RTKSupersivor::new().join(|e| {
+                match e {
+                    Connected(_) => println!("Connected."),
+                    ConnectFailed => {
+                        println!("Failed.");
+                        thread::sleep(Duration::from_secs(1));
                     }
-                }
+                    Disconnected => {
+                        println!("Disconnected.");
+                        thread::sleep(Duration::from_secs(1));
+                    }
+                    Event(_, Some((time, event))) => match event {
+                        Solution::Uninitialized(_) => {}
+                        Solution::Data(data) => {
+                            let SolutionData { state, enu, dir } = data;
+                            let SolutionState {
+                                state_pos,
+                                satellites: _,
+                                state_dir,
+                            } = state;
+                            if state_pos >= 40 && state_dir >= 30 {
+                                let pose = filter.lock().unwrap().update(
+                                    PoseType::Absolute,
+                                    time,
+                                    Isometry2::new(
+                                        Vector2::new(enu.e as f32, enu.n as f32),
+                                        dir as f32,
+                                    ),
+                                );
+                                let _ = sender.send(Message::Pose(pose));
+                            }
+                        }
+                    },
+                    Event(_, None) => {}
+                };
                 true
-            }) {}
+            });
         });
     }
 
     let target = Arc::new(Mutex::new((Instant::now(), Physical::RELEASED)));
-    if let Some(mut pm1) = PM1Threads::open_all(1).into_iter().next() {
-        let sender = sender;
-        let filter = filter;
+    {
         let target = target.clone();
-        std::thread::spawn(move || {
-            while pm1.join(|chassis, event| {
-                chassis.send(*target.lock().unwrap());
-                if let Some((time, PM1Event::Odometry(Odometry { s: _, a: _, pose }))) = event {
-                    let pose = filter
-                        .lock()
-                        .unwrap()
-                        .update(PoseType::Relative, time, pose);
-                    let _ = sender.send(Message::Pose(pose));
-                }
+        thread::spawn(move || {
+            PM1Supervisor::new().join(|e| {
+                match e {
+                    Connected(driver) => println!("Connected: {}", driver.status()),
+                    ConnectFailed => {
+                        println!("Failed.");
+                        thread::sleep(Duration::from_secs(1));
+                    }
+                    Disconnected => {
+                        println!("Disconnected.");
+                        thread::sleep(Duration::from_secs(1));
+                    }
+                    Event(chassis, event) => {
+                        chassis.send(*target.lock().unwrap());
+                        if let Some((time, PM1Event::Odometry(Odometry { s: _, a: _, pose }))) =
+                            event
+                        {
+                            let pose =
+                                filter
+                                    .lock()
+                                    .unwrap()
+                                    .update(PoseType::Relative, time, pose);
+                            let _ = sender.send(Message::Pose(pose));
+                        }
+                    }
+                };
                 true
-            }) {}
+            });
         });
     }
 
