@@ -87,6 +87,7 @@ impl Display for Task {
 }
 
 /// 路径片段
+#[derive(Clone)]
 pub struct PathSegment<'a> {
     to_robot: Isometry2<f32>,
     slice: &'a [Isometry2<f32>],
@@ -103,10 +104,10 @@ impl PathSegment<'_> {
     }
 
     pub fn size_proportion(self) -> f32 {
-        const C: f32 = 1.0;
+        let o = Vector2::new(self.light_radius, 0.0);
         let r_squared: f32 = self.light_radius * self.light_radius;
-        let o = Vector2::new(C, 0.0);
 
+        let temp_path = self.clone();
         let key_nodes: Vec<_> = self
             // map_while (unstable)
             .map(|p| {
@@ -123,9 +124,25 @@ impl PathSegment<'_> {
             .take_while(|o| o.is_some())
             .map(|o| o.unwrap())
             .collect();
-        let head = intersection(key_nodes.first().unwrap(), r_squared, true);
-        let tail = intersection(key_nodes.last().unwrap(), r_squared, false);
-        normalize(angle_of(tail) - angle_of(head), 0.0..2.0 * PI) / (2.0 * PI)
+        if key_nodes.is_empty() {
+            println!(
+                "KEY NODES IS EMPTY!!! WHY??? {:?}",
+                &temp_path
+                    .take(10)
+                    .map(|i| format!(
+                        "({} {} {})",
+                        i.translation.vector[0],
+                        i.translation.vector[1],
+                        i.rotation.angle()
+                    ))
+                    .collect::<Vec<_>>()
+            );
+            0.5
+        } else {
+            let head = intersection(key_nodes.first().unwrap(), r_squared, true);
+            let tail = intersection(key_nodes.last().unwrap(), r_squared, false);
+            normalize(angle_of(tail) - angle_of(head), 0.0..2.0 * PI) / (2.0 * PI)
+        }
     }
 }
 
