@@ -1,4 +1,4 @@
-use driver::{Driver, DriverHandle, Module};
+use driver::{Driver, Module};
 use nalgebra::{Isometry2, Vector2};
 use path_follower::controller::Controller;
 use pm1_control_model::Physical;
@@ -78,65 +78,59 @@ fn main() {
         };
     });
 
-    if let Some(rtk) = RTKThreads::open_all(1).into_iter().next() {
+    if let Some(mut rtk) = RTKThreads::open_all(1).into_iter().next() {
         let sender = sender.clone();
         let filter = filter.clone();
         std::thread::spawn(move || {
-            for (time, event) in rtk {
-                match event {
-                    Solution::Uninitialized(_) => {}
-                    Solution::Data(data) => {
-                        let SolutionData { state, enu, dir } = data;
-                        let SolutionState {
-                            state_pos,
-                            satellites: _,
-                            state_dir,
-                        } = state;
-                        if state_pos >= 40 && state_dir >= 40 {
-                            let pose = filter.lock().unwrap().update(
-                                PoseType::Absolute,
-                                time,
-                                Isometry2::new(
-                                    Vector2::new(enu.e as f32, enu.n as f32),
-                                    dir as f32,
-                                ),
-                            );
-                            let _ = sender.send(Message::Pose(pose));
-                        }
+            while rtk.wait(|_, time, event| match event {
+                Solution::Uninitialized(_) => {}
+                Solution::Data(data) => {
+                    let SolutionData { state, enu, dir } = data;
+                    let SolutionState {
+                        state_pos,
+                        satellites: _,
+                        state_dir,
+                    } = state;
+                    if state_pos >= 40 && state_dir >= 40 {
+                        let pose = filter.lock().unwrap().update(
+                            PoseType::Absolute,
+                            time,
+                            Isometry2::new(Vector2::new(enu.e as f32, enu.n as f32), dir as f32),
+                        );
+                        let _ = sender.send(Message::Pose(pose));
                     }
                 }
-            }
+            }) {}
         });
     }
 
-    let handle = if let Some(pm1) = PM1Threads::open_all(1).into_iter().next() {
+    let target = Arc::new(Mutex::new(Physical::RELEASED));
+    if let Some(mut pm1) = PM1Threads::open_all(1).into_iter().next() {
         let sender = sender;
         let filter = filter;
-        let handle = pm1.handle();
+        let target = target.clone();
         std::thread::spawn(move || {
-            for (time, event) in pm1 {
+            while pm1.wait(|chassis, time, event| {
                 if let PM1Event::Odometry(Odometry { s: _, a: _, pose }) = event {
+                    chassis.send(*target.lock().unwrap());
                     let pose = filter
                         .lock()
                         .unwrap()
                         .update(PoseType::Relative, time, pose);
                     let _ = sender.send(Message::Pose(pose));
                 }
-            }
+            }) {}
         });
-        handle
-    } else {
-        return;
-    };
+    }
 
     for msg in receiver {
         match msg {
             Message::Pose(pose) => {
                 if let Some(proportion) = controller.put_pose(&pose) {
-                    handle.send(Physical {
+                    *target.lock().unwrap() = Physical {
                         speed: 0.1,
                         rudder: 2.0 * (proportion - 0.5),
-                    });
+                    };
                 }
             }
             Message::List => {
