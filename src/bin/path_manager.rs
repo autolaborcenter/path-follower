@@ -7,7 +7,7 @@ use pm1_sdk::{
     PM1Supervisor,
 };
 use pose_filter::{InterpolationAndPredictionFilter, PoseFilter, PoseType};
-use rtk_ins570_rs::{ins570::*, RTKSupersivor};
+use rtk_ins570::{ins570::*, RTKSupersivor};
 use std::{
     sync::{mpsc::*, Arc, Mutex},
     thread,
