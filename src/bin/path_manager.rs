@@ -2,12 +2,9 @@ use driver::{Driver, SupersivorEventForSingle::*, SupervisorForSingle};
 use nalgebra::{Isometry2, Vector2};
 use path_follower::controller::Controller;
 use pm1_control_model::Physical;
-use pm1_sdk::{
-    pm1::{odometry::Odometry, PM1Event},
-    PM1Supervisor,
-};
+use pm1_sdk::{odometry::Odometry, PM1Event};
 use pose_filter::{InterpolationAndPredictionFilter, PoseFilter, PoseType};
-use rtk_ins570::{ins570::*, RTKSupersivor};
+use rtk_ins570::{ins570::*, RTK};
 use std::{
     sync::{mpsc::*, Arc, Mutex},
     thread,
@@ -86,9 +83,9 @@ fn main() {
         let sender = sender.clone();
         let filter = filter.clone();
         thread::spawn(move || {
-            RTKSupersivor::new().join(|e| {
+            SupervisorForSingle::<String, RTK>::new().join(|e| {
                 match e {
-                    Connected(_) => println!("Connected."),
+                    Connected(_, _) => println!("Connected."),
                     ConnectFailed => {
                         println!("Failed.");
                         thread::sleep(Duration::from_secs(1));
@@ -130,9 +127,9 @@ fn main() {
     {
         let target = target.clone();
         thread::spawn(move || {
-            PM1Supervisor::new().join(|e| {
+            SupervisorForSingle::<String, pm1_sdk::PM1>::new().join(|e| {
                 match e {
-                    Connected(driver) => println!("Connected: {}", driver.status()),
+                    Connected(_, driver) => println!("Connected: {}", driver.status()),
                     ConnectFailed => {
                         println!("Failed.");
                         thread::sleep(Duration::from_secs(1));
