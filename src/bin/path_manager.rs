@@ -2,7 +2,7 @@ use driver::{Driver, SupersivorEventForSingle::*, SupervisorForSingle};
 use nalgebra::{Isometry2, Vector2};
 use path_follower::controller::Controller;
 use pm1_control_model::Physical;
-use pm1_sdk::{odometry::Odometry, PM1Event};
+use pm1_sdk::{odometry::Odometry, PM1Event, PM1};
 use pose_filter::{InterpolationAndPredictionFilter, PoseFilter, PoseType};
 use rtk_ins570::{ins570::*, RTK};
 use std::{
@@ -83,7 +83,7 @@ fn main() {
         let sender = sender.clone();
         let filter = filter.clone();
         thread::spawn(move || {
-            SupervisorForSingle::<String, RTK>::new().join(|e| {
+            SupervisorForSingle::<RTK>::new().join(|e| {
                 match e {
                     Connected(_, _) => println!("Connected."),
                     ConnectFailed => {
@@ -127,7 +127,7 @@ fn main() {
     {
         let target = target.clone();
         thread::spawn(move || {
-            SupervisorForSingle::<String, pm1_sdk::PM1>::new().join(|e| {
+            SupervisorForSingle::<PM1>::new().join(|e| {
                 match e {
                     Connected(_, driver) => println!("Connected: {}", driver.status()),
                     ConnectFailed => {
