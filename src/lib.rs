@@ -58,6 +58,23 @@ impl Controller {
         path
     }
 
+    fn read_to_string(mut reader: BufReader<File>) -> std::io::Result<String> {
+        let mut contents = String::new();
+        reader.read_to_string(&mut contents)?;
+        Ok(contents)
+    }
+
+    /// 读取指定路径
+    pub fn read(&self, name: &str) -> std::io::Result<Vec<Isometry2<f32>>> {
+        Pipe(name)
+            .then(|it| self.build_absolute(it))
+            .maybe(|it| File::open(it))?
+            .then(|it| BufReader::new(it))
+            .maybe(|it| Self::read_to_string(it))?
+            .then(|it| Ok(it.lines().filter_map(parse_isometry2).collect()))
+            .finally()
+    }
+
     /// 开始录制
     pub fn record_to(&mut self, name: &str) -> std::io::Result<()> {
         self.task = Pipe(name)
@@ -71,18 +88,8 @@ impl Controller {
 
     /// 开始循径
     pub fn follow(&mut self, name: &str) -> std::io::Result<()> {
-        fn read_to_string(mut reader: BufReader<File>) -> std::io::Result<String> {
-            let mut contents = String::new();
-            reader.read_to_string(&mut contents)?;
-            Ok(contents)
-        }
-
         self.task = Pipe(name)
-            .then(|it| self.build_absolute(it))
-            .maybe(|it| File::open(it))?
-            .then(|it| BufReader::new(it))
-            .maybe(|it| read_to_string(it))?
-            .then(|it| it.lines().filter_map(parse_isometry2).collect())
+            .maybe(|it| self.read(it))?
             .then(|it| follow::Task::new(it))
             .then(|it| Task::Follow(it))
             .then(|it| Some(it))
