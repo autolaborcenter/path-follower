@@ -1,5 +1,5 @@
 ﻿use super::normalize;
-use crate::controller::nameof;
+use crate::nameof;
 use nalgebra::Isometry2;
 use std::{f32::consts::PI, fs::File, io::Write, path::PathBuf};
 
