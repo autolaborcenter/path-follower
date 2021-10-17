@@ -9,12 +9,12 @@ use std::{
 use task::{follow, record, Task};
 
 /// 任务控制器
-pub struct Controller {
+pub struct Tracker {
     repo_path: PathBuf,
     task: Option<Task>,
 }
 
-impl Controller {
+impl Tracker {
     /// 新建控制器
     /// 若仓库路径不存在，建立新仓库
     pub fn new(path: &str) -> std::io::Result<Self> {
@@ -109,13 +109,7 @@ impl Controller {
                 record.append(pose);
                 None
             }
-            Task::Follow(follow) => match follow.search(pose) {
-                Some(seg) => Some(seg.size_proportion()),
-                None => {
-                    eprintln!("The robot is too far away from any node of the path.");
-                    None
-                }
-            },
+            Task::Follow(follow) => follow.search(pose).map(|seg| seg.size_proportion()),
         })
     }
 }
