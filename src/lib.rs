@@ -87,7 +87,7 @@ impl Tracker {
     }
 
     /// 开始循径
-    pub fn follow(&mut self, name: &str) -> std::io::Result<()> {
+    pub fn track(&mut self, name: &str) -> std::io::Result<()> {
         self.task = Pipe(name)
             .maybe(|it| self.read(it))?
             .then(|it| follow::Task::new(it))
