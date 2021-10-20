@@ -11,7 +11,8 @@ use task::{follow, record, Task};
 /// 任务控制器
 pub struct Tracker {
     repo_path: PathBuf,
-    task: Option<Task>,
+    task: Option<(String, Task)>,
+    pub pause: bool,
 }
 
 impl Tracker {
@@ -25,6 +26,7 @@ impl Tracker {
         Ok(Self {
             repo_path,
             task: None,
+            pause: false,
         })
     }
 
@@ -77,22 +79,34 @@ impl Tracker {
 
     /// 开始录制
     pub fn record_to(&mut self, name: &str) -> std::io::Result<()> {
+        if let Some((ref current, _)) = self.task {
+            if name == current {
+                self.pause = false;
+                return Ok(());
+            }
+        }
         self.task = Pipe(name)
             .then(|it| self.build_absolute(it))
             .maybe(|it| record::Task::new(it))?
             .then(|it| Task::Record(it))
-            .then(|it| Some(it))
+            .then(|it| Some((name.into(), it)))
             .finally();
         Ok(())
     }
 
     /// 开始循径
     pub fn track(&mut self, name: &str) -> std::io::Result<()> {
+        if let Some((ref current, _)) = self.task {
+            if name == current {
+                self.pause = false;
+                return Ok(());
+            }
+        }
         self.task = Pipe(name)
             .maybe(|it| self.read(it))?
             .then(|it| follow::Task::new(it))
             .then(|it| Task::Follow(it))
-            .then(|it| Some(it))
+            .then(|it| Some((name.into(), it)))
             .finally();
         Ok(())
     }
@@ -104,12 +118,17 @@ impl Tracker {
 
     /// （向任务）传入位姿
     pub fn put_pose(&mut self, pose: &Isometry2<f32>) -> Option<f32> {
-        self.task.as_mut().and_then(|ref mut task| match task {
+        self.task.as_mut().and_then(|(_, ref mut task)| match task {
             Task::Record(record) => {
-                record.append(pose);
+                if !self.pause {
+                    record.append(pose);
+                }
                 None
             }
-            Task::Follow(follow) => follow.search(pose).map(|seg| seg.size_proportion()),
+            Task::Follow(follow) => follow
+                .search(pose)
+                .filter(|_| !self.pause)
+                .map(|seg| seg.size_proportion()),
         })
     }
 }
