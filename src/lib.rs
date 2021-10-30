@@ -6,7 +6,7 @@ use std::{
     io::{BufReader, Read},
     path::{Path, PathBuf},
 };
-use task::{follow, record, Task};
+use task::{record, track, Task};
 
 /// 任务控制器
 pub struct Tracker {
@@ -104,7 +104,7 @@ impl Tracker {
         }
         self.task = Pipe(name)
             .maybe(|it| self.read(it))?
-            .then(|it| follow::Task::new(it))
+            .then(|it| track::Task::new(it))
             .then(|it| Task::Follow(it))
             .then(|it| Some((name.into(), it)))
             .finally();

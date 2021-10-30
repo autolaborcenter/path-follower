@@ -1,11 +1,11 @@
-﻿pub mod follow;
-pub mod record;
+﻿pub mod record;
+pub mod track;
 
 use std::ops::Range;
 
 pub enum Task {
     Record(record::Task),
-    Follow(follow::Task),
+    Follow(track::Task),
 }
 
 fn normalize(mut angle: f32, range: Range<f32>) -> f32 {
