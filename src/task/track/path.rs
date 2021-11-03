@@ -16,18 +16,6 @@ pub(super) enum TrackError {
     Termination,
 }
 
-macro_rules! with_index {
-    ($segment:expr) => {
-        $segment.iter().enumerate()
-    };
-}
-
-macro_rules! find_in {
-    ($iter:expr, $c:expr; $squared:expr) => {
-        $iter.find(|(_, p)| ($c - p.translation.vector).norm_squared() < $squared)
-    };
-}
-
 impl Path {
     pub fn new(path: Vec<Vec<Isometry2<f32>>>) -> Self {
         Self {
@@ -42,26 +30,55 @@ impl Path {
     pub fn relocate(
         &mut self,
         pose: &Isometry2<f32>,
+        light_radius: f32,
         search_radius: f32,
         r#loop: bool,
     ) -> Result<(), ()> {
-        let c = pose.translation.vector;
-        let squared = search_radius.powi(2);
+        // 光斑中心
+        let c = pose * Isometry2::new(Vector2::new(light_radius, 0.0), 0.0);
+        // 到光斑坐标系的变换
+        let to_local = c.inverse();
+
+        let best = light_radius.powi(2);
+        let available = search_radius.powi(2);
+
+        let mut min: Option<(usize, usize, f32)> = None;
 
         // 顺序遍历
-        let path = self.path.as_slice();
+        for (j, p) in self.path[self.index.0]
+            .iter()
+            .enumerate()
+            .skip(self.index.1)
         {
-            let segment = path[self.index.0].as_slice();
-            if let Some((j, _)) = find_in!(with_index!(segment).skip(self.index.1), c; squared) {
-                self.index.1 = j;
-                return Ok(());
+            let local = to_local * p;
+            match CheckResult::check(&local, best, available) {
+                CheckResult::Best => {
+                    self.index.1 = j;
+                    return Ok(());
+                }
+                CheckResult::Available(p) => {
+                    if min.is_none() || p < min.unwrap().2 {
+                        min = Some((self.index.0, j, p));
+                    }
+                }
+                CheckResult::Nothing => {}
             }
         }
-        for (i, segment) in with_index!(path).skip(self.index.0 + 1) {
-            if let Some((j, _)) = find_in!(with_index!(segment.as_slice()), c; squared) {
-                self.index.0 = i;
-                self.index.1 = j;
-                return Ok(());
+        for (i, segment) in self.path.iter().enumerate().skip(self.index.0 + 1) {
+            for (j, p) in segment.iter().enumerate().skip(self.index.1) {
+                let local = to_local * p;
+                match CheckResult::check(&local, best, available) {
+                    CheckResult::Best => {
+                        self.index = (i, j);
+                        return Ok(());
+                    }
+                    CheckResult::Available(p) => {
+                        if min.is_none() || p < min.unwrap().2 {
+                            min = Some((i, j, p));
+                        }
+                    }
+                    CheckResult::Nothing => {}
+                }
             }
         }
 
@@ -70,23 +87,50 @@ impl Path {
             return Err(());
         }
 
-        for (i, segment) in with_index!(path).take(self.index.0) {
-            if let Some((j, _)) = find_in!(with_index!(segment.as_slice()), c; squared) {
-                self.index.0 = i;
-                self.index.1 = j;
-                return Ok(());
+        for (i, segment) in self.path.iter().enumerate().take(self.index.0) {
+            for (j, p) in segment.iter().enumerate().skip(self.index.1) {
+                let local = to_local * p;
+                match CheckResult::check(&local, best, available) {
+                    CheckResult::Best => {
+                        self.index = (i, j);
+                        return Ok(());
+                    }
+                    CheckResult::Available(p) => {
+                        if min.is_none() || p < min.unwrap().2 {
+                            min = Some((i, j, p));
+                        }
+                    }
+                    CheckResult::Nothing => {}
+                }
             }
         }
+        for (j, p) in self.path[self.index.0]
+            .iter()
+            .enumerate()
+            .take(self.index.1)
         {
-            let segment = path[self.index.0].as_slice();
-            if let Some((j, _)) = find_in!(with_index!(segment).take(self.index.1), c; squared) {
-                self.index.1 = j;
-                return Ok(());
+            let local = to_local * p;
+            match CheckResult::check(&local, best, available) {
+                CheckResult::Best => {
+                    self.index.1 = j;
+                    return Ok(());
+                }
+                CheckResult::Available(p) => {
+                    if min.is_none() || p < min.unwrap().2 {
+                        min = Some((self.index.0, j, p));
+                    }
+                }
+                CheckResult::Nothing => {}
             }
         }
 
-        // 重定位失败
-        Err(())
+        if let Some((i, j, _)) = min {
+            self.index = (i, j);
+            Ok(())
+        } else {
+            // 重定位失败
+            Err(())
+        }
     }
 
     /// 在当前路段搜索并产生控制量
@@ -99,11 +143,18 @@ impl Path {
         let squared = light_radius.powi(2);
 
         // 遍历当前路段
-        let segment = self.path[self.index.0].as_slice();
-        if let Some((j, _)) = find_in!(with_index!(segment).skip(self.index.1), c; squared) {
+        let first = self.path[self.index.0]
+            .as_slice()
+            .iter()
+            .enumerate()
+            .skip(self.index.1)
+            .find(|(_, p)| (c - p.translation.vector).norm_squared() < squared);
+
+        // 生成控制量或异常
+        if let Some((j, _)) = first {
             self.index.1 = j;
             Ok(self.size_proportion(Isometry2::new(c, pose.rotation.angle()), squared))
-        } else if segment.len() - self.index.1 < 2 {
+        } else if self.path[self.index.0].len() - self.index.1 < 2 {
             Err(TrackError::Termination)
         } else {
             Err(TrackError::OutOfPath)
@@ -124,6 +175,7 @@ impl Path {
         true
     }
 
+    /// 生成初始化动作
     pub fn initialize(&self, pose: &Isometry2<f32>, light_radius: f32) -> InitializeResult {
         const FRAC_PI_16: f32 = PI / 16.0;
 
@@ -228,4 +280,26 @@ fn dir_vector(p: &Isometry2<f32>) -> Vector2<f32> {
 #[inline]
 fn angle_of(p: Vector2<f32>) -> f32 {
     p.y.atan2(p.x)
+}
+
+enum CheckResult {
+    Best,
+    Available(f32),
+    Nothing,
+}
+
+impl CheckResult {
+    #[inline]
+    fn check(local: &Isometry2<f32>, best: f32, available: f32) -> Self {
+        let p = local.translation.vector.norm_squared();
+        let d = local.rotation.angle().abs();
+
+        if p < best && d < FRAC_PI_2 {
+            Self::Best
+        } else if p < available {
+            Self::Available(p)
+        } else {
+            Self::Nothing
+        }
+    }
 }

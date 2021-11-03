@@ -56,6 +56,7 @@ impl Task {
                 State::Relocating => {
                     match self.path.relocate(
                         pose,
+                        self.parameters.light_radius,
                         self.parameters.search_radius,
                         self.parameters.r#loop,
                     ) {
