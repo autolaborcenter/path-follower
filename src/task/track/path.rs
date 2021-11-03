@@ -1,4 +1,4 @@
-﻿use nalgebra::{Complex, Isometry2, Vector2};
+﻿use nalgebra::{Complex, Isometry2, Point2, Vector2};
 use std::f32::consts::{FRAC_PI_2, PI};
 
 pub(super) struct Path {
@@ -96,7 +96,7 @@ impl Path {
         pose: &Isometry2<f32>,
         light_radius: f32,
     ) -> Result<f32, LocalSearchError> {
-        let c = pose * Vector2::new(light_radius, 0.0);
+        let c = (pose * Point2::from(Vector2::new(light_radius, 0.0))).coords;
         let squared = light_radius.powi(2);
 
         // 遍历当前路段
@@ -113,14 +113,15 @@ impl Path {
 
     /// 尝试加载下一个路段
     pub fn next_segment(&mut self, r#loop: bool) -> bool {
-        self.index.0 += 1;
-        self.index.1 = 0;
-        if self.index.0 == self.path.len() {
+        if self.index.0 == self.path.len() - 1 {
             if !r#loop {
                 return false;
             }
             self.index.0 = 0;
+        } else {
+            self.index.0 += 1;
         }
+        self.index.1 = 0;
         true
     }
 
@@ -164,8 +165,8 @@ impl Path {
             .flatten()
             .unwrap_or(begin);
 
-        let begin = intersection(&begin, squared, 1.0);
-        let end = intersection(&end, squared, -1.0);
+        let begin = intersection(&begin, squared, -1.0);
+        let end = intersection(&end, squared, 1.0);
         let diff = angle_of(end) - angle_of(begin); // [-2π, 2π]
         (diff.signum() * PI - diff) / 2.0
     }
