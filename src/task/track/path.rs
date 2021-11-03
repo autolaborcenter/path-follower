@@ -1,5 +1,5 @@
 ﻿use nalgebra::{Complex, Isometry2, Point2, Vector2};
-use std::f32::consts::{FRAC_PI_2, PI};
+use std::f32::consts::{FRAC_PI_2, FRAC_PI_4, PI, SQRT_2};
 
 pub(super) struct Path {
     path: Vec<Vec<Isometry2<f32>>>,
@@ -8,11 +8,10 @@ pub(super) struct Path {
 
 pub(super) enum InitializeResult {
     Complete,
-    Drive(f32),
-    Failed,
+    Drive(f32, f32),
 }
 
-pub(super) enum LocalSearchError {
+pub(super) enum TrackError {
     OutOfPath,
     Termination,
 }
@@ -24,7 +23,7 @@ macro_rules! with_index {
 }
 
 macro_rules! find_in {
-    ($iter:expr, $c:expr, $squared:expr) => {
+    ($iter:expr, $c:expr; $squared:expr) => {
         $iter.find(|(_, p)| ($c - p.translation.vector).norm_squared() < $squared)
     };
 }
@@ -53,13 +52,13 @@ impl Path {
         let path = self.path.as_slice();
         {
             let segment = path[self.index.0].as_slice();
-            if let Some((j, _)) = find_in!(with_index!(segment).skip(self.index.1), c, squared) {
+            if let Some((j, _)) = find_in!(with_index!(segment).skip(self.index.1), c; squared) {
                 self.index.1 = j;
                 return Ok(());
             }
         }
         for (i, segment) in with_index!(path).skip(self.index.0 + 1) {
-            if let Some((j, _)) = find_in!(with_index!(segment.as_slice()), c, squared) {
+            if let Some((j, _)) = find_in!(with_index!(segment.as_slice()), c; squared) {
                 self.index.0 = i;
                 self.index.1 = j;
                 return Ok(());
@@ -72,7 +71,7 @@ impl Path {
         }
 
         for (i, segment) in with_index!(path).take(self.index.0) {
-            if let Some((j, _)) = find_in!(with_index!(segment.as_slice()), c, squared) {
+            if let Some((j, _)) = find_in!(with_index!(segment.as_slice()), c; squared) {
                 self.index.0 = i;
                 self.index.1 = j;
                 return Ok(());
@@ -80,7 +79,7 @@ impl Path {
         }
         {
             let segment = path[self.index.0].as_slice();
-            if let Some((j, _)) = find_in!(with_index!(segment).take(self.index.1), c, squared) {
+            if let Some((j, _)) = find_in!(with_index!(segment).take(self.index.1), c; squared) {
                 self.index.1 = j;
                 return Ok(());
             }
@@ -90,24 +89,24 @@ impl Path {
         Err(())
     }
 
-    /// 在当前路段搜索
-    pub fn search_local(
+    /// 在当前路段搜索并产生控制量
+    pub fn track_within(
         &mut self,
         pose: &Isometry2<f32>,
         light_radius: f32,
-    ) -> Result<f32, LocalSearchError> {
+    ) -> Result<f32, TrackError> {
         let c = (pose * Point2::from(Vector2::new(light_radius, 0.0))).coords;
         let squared = light_radius.powi(2);
 
         // 遍历当前路段
         let segment = self.path[self.index.0].as_slice();
-        if let Some((j, _)) = find_in!(with_index!(segment).skip(self.index.1), c, squared) {
+        if let Some((j, _)) = find_in!(with_index!(segment).skip(self.index.1), c; squared) {
             self.index.1 = j;
             Ok(self.size_proportion(Isometry2::new(c, pose.rotation.angle()), squared))
         } else if segment.len() - self.index.1 < 2 {
-            Err(LocalSearchError::Termination)
+            Err(TrackError::Termination)
         } else {
-            Err(LocalSearchError::OutOfPath)
+            Err(TrackError::OutOfPath)
         }
     }
 
@@ -126,24 +125,55 @@ impl Path {
     }
 
     pub fn initialize(&self, pose: &Isometry2<f32>, light_radius: f32) -> InitializeResult {
-        // 机器人坐标系上的光斑中心
-        let c_light = Isometry2::new(Vector2::new(light_radius, 0.0), 0.0);
-        // 光斑坐标系上的目标位置
-        let target = (pose * c_light).inverse() * self.path[self.index.0][self.index.1];
+        const FRAC_PI_16: f32 = PI / 16.0;
 
-        let squared = light_radius.powi(2);
+        // 光斑中心相对机器人的位姿
+        let c_light = Isometry2::new(Vector2::new(light_radius, 0.0), 0.0);
+        // 机器人坐标系上机器人应该到达的目标位置
+        let target = pose.inverse() * (self.path[self.index.0][self.index.1] * c_light.inverse());
+
         let p = target.translation.vector;
         let d = target.rotation.angle();
 
-        // 条件良好，直接开始循线
-        if d.abs() < FRAC_PI_2 && p.norm_squared() < squared {
-            return InitializeResult::Complete;
-        }
+        // 退出临界角
+        // 目标方向小于此角度时考虑退出
+        let theta = FRAC_PI_16; // assert θ < π/4
 
-        todo!("初始化动作")
+        // 原地转安全半径
+        // 目标距离小于此半径且目标方向小于临界角时可退出
+        let squared = {
+            let rho = SQRT_2 * light_radius;
+            let theta = 3.0 * FRAC_PI_4 + theta; // 3π/4 + θ
+            let (sin, cos) = theta.sin_cos();
+            let vec = Vector2::new(light_radius + rho * cos, rho * sin);
+            vec.norm_squared()
+        };
+
+        return if p.norm_squared() < squared {
+            if d.abs() < theta {
+                // 位置方向条件都满足，退出
+                InitializeResult::Complete
+            } else {
+                // 方向条件不满足，原地转
+                InitializeResult::Drive(
+                    // 移动方向
+                    p[0].signum(),
+                    // 转向方向
+                    -p[0].signum() * d.signum() * FRAC_PI_2,
+                )
+            }
+        } else {
+            // 位置条件不满足，逼近
+            InitializeResult::Drive(
+                // 速度
+                f32::min(1.0, p.norm() / 2.0) * p[0].signum(),
+                // 方向
+                -p[1].atan2(p[0].abs()),
+            )
+        };
     }
 
-    /// 计算面积比并转化到 [-π, π]
+    /// 计算面积比并转化到 [-π/2, π/2]
     fn size_proportion(&self, c: Isometry2<f32>, squared: f32) -> f32 {
         let segment = self.path[self.index.0].as_slice();
         let to_local = c.inverse();
@@ -168,7 +198,7 @@ impl Path {
         let begin = intersection(&begin, squared, -1.0);
         let end = intersection(&end, squared, 1.0);
         let diff = angle_of(end) - angle_of(begin); // [-2π, 2π]
-        (diff.signum() * PI - diff) / 2.0
+        (diff.signum() * PI - diff) / 2.0 // [-π/2, π/2]
     }
 }
 

@@ -113,7 +113,7 @@ impl Tracker {
     }
 
     /// （向任务）传入位姿
-    pub fn put_pose(&mut self, pose: &Isometry2<f32>) -> Option<f32> {
+    pub fn put_pose(&mut self, pose: &Isometry2<f32>) -> Option<(f32, f32)> {
         self.task.as_mut().and_then(|(_, ref mut task)| match task {
             Task::Record(record) => {
                 record.append(pose);

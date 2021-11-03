@@ -2,7 +2,7 @@ use nalgebra::Isometry2;
 
 mod path;
 
-use path::{LocalSearchError, Path};
+use path::{Path, TrackError};
 
 /// 路径跟踪任务
 pub struct Task {
@@ -50,7 +50,7 @@ impl Task {
     }
 
     /// 循线
-    pub fn track<'a>(&'a mut self, pose: &Isometry2<f32>) -> Result<f32, Error> {
+    pub fn track<'a>(&'a mut self, pose: &Isometry2<f32>) -> Result<(f32, f32), Error> {
         loop {
             match self.state {
                 State::Relocating => {
@@ -67,15 +67,14 @@ impl Task {
                     use path::InitializeResult::*;
                     match self.path.initialize(pose, self.parameters.light_radius) {
                         Complete => self.state = State::Tracking,
-                        Drive(value) => return Ok(value),
-                        Failed => return Err(Error::OutOfPath),
+                        Drive(dir, value) => return Ok((dir, value)),
                     }
                 }
                 State::Tracking => {
-                    match self.path.search_local(pose, self.parameters.light_radius) {
-                        Ok(value) => return Ok(value),
-                        Err(LocalSearchError::OutOfPath) => return Err(Error::OutOfPath),
-                        Err(LocalSearchError::Termination) => {
+                    match self.path.track_within(pose, self.parameters.light_radius) {
+                        Ok(value) => return Ok((1.0, value)),
+                        Err(TrackError::OutOfPath) => return Err(Error::OutOfPath),
+                        Err(TrackError::Termination) => {
                             if self.path.next_segment(self.parameters.r#loop) {
                                 self.state = State::Initializing;
                             } else {
