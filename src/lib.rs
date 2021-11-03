@@ -119,7 +119,13 @@ impl Tracker {
                 record.append(pose);
                 None
             }
-            Task::Follow(follow) => follow.track(pose).ok(),
+            Task::Follow(follow) => match follow.track(pose) {
+                Ok(value) => Some(value),
+                Err(e) => {
+                    eprintln!("{:?}", e);
+                    None
+                }
+            },
         })
     }
 }

@@ -12,9 +12,11 @@ pub struct Task {
 }
 
 /// 跟踪失败信息
+#[derive(Debug)]
 pub enum Error {
     RelocationFailed, // 搜索失败
-    OutOfPath,        //
+    OutOfPath,        // 丢失路径
+    Complete,         // 任务完成
 }
 
 enum State {
@@ -39,10 +41,7 @@ impl Task {
                 light_radius: 1.0,
                 r#loop: false,
             },
-            path: Path {
-                path: vec![path],
-                index: (0, 0),
-            },
+            path: Path::new(vec![path]),
             state: State::Tracking,
         }
     }
@@ -57,18 +56,34 @@ impl Task {
                         self.parameters.search_radius,
                         self.parameters.r#loop,
                     ) {
-                        Ok(()) => {}
+                        Ok(()) => {
+                            // TODO
+                        }
                         Err(()) => return Err(Error::RelocationFailed),
                     }
+                }
+                State::Rotation0 => {
+                    // TODO
+                }
+                State::GettingClose => {
+                    // TODO
+                }
+                State::Rotation1 => {
+                    // TODO
                 }
                 State::Tracking => {
                     match self.path.search_local(pose, self.parameters.light_radius) {
                         Ok(value) => return Ok(value),
                         Err(LocalSearchError::OutOfPath) => return Err(Error::OutOfPath),
-                        Err(LocalSearchError::Termination) => {}
+                        Err(LocalSearchError::Termination) => {
+                            if self.path.next_segment(self.parameters.r#loop) {
+                                // TODO
+                            } else {
+                                return Err(Error::Complete);
+                            }
+                        }
                     }
                 }
-                _ => todo!(),
             }
         }
     }

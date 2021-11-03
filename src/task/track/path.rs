@@ -2,8 +2,8 @@
 use std::f32::consts::PI;
 
 pub(super) struct Path {
-    pub path: Vec<Vec<Isometry2<f32>>>,
-    pub index: (usize, usize),
+    path: Vec<Vec<Isometry2<f32>>>,
+    index: (usize, usize),
 }
 
 pub(super) enum LocalSearchError {
@@ -24,6 +24,13 @@ macro_rules! find_in {
 }
 
 impl Path {
+    pub fn new(path: Vec<Vec<Isometry2<f32>>>) -> Self {
+        Self {
+            path,
+            index: (0, 0),
+        }
+    }
+
     /// 根据当前位姿重定位
     ///
     /// 将遍历整个路径，代价极大且计算密集
@@ -96,6 +103,23 @@ impl Path {
         } else {
             Err(LocalSearchError::OutOfPath)
         }
+    }
+
+    /// 尝试加载下一个路段
+    pub fn next_segment(&mut self, r#loop: bool) -> bool {
+        self.index.0 += 1;
+        self.index.1 = 0;
+        if self.index.0 == self.path.len() {
+            if !r#loop {
+                return false;
+            }
+            self.index.0 = 0;
+        }
+        true
+    }
+
+    pub fn target(&self) -> Isometry2<f32> {
+        self.path[self.index.0][self.index.1]
     }
 
     /// 计算面积比并转化到 [-π, π]
