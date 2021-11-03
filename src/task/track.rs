@@ -20,10 +20,8 @@ pub enum Error {
 }
 
 enum State {
-    Relocation,   // 重新搜索
-    Rotation0,    // 面向目标
-    GettingClose, // 接近目标
-    Rotation1,    // 转向路线方向
+    Relocating,   // 重新搜索
+    Initializing, // 初始化
     Tracking,     // 连续循线
 }
 
@@ -46,30 +44,32 @@ impl Task {
         }
     }
 
+    /// 下一次更新时进行重定位
+    pub fn relocate(&mut self) {
+        self.state = State::Relocating;
+    }
+
     /// 循线
     pub fn track<'a>(&'a mut self, pose: &Isometry2<f32>) -> Result<f32, Error> {
         loop {
             match self.state {
-                State::Relocation => {
+                State::Relocating => {
                     match self.path.relocate(
                         pose,
                         self.parameters.search_radius,
                         self.parameters.r#loop,
                     ) {
-                        Ok(()) => {
-                            // TODO
-                        }
+                        Ok(()) => self.state = State::Initializing,
                         Err(()) => return Err(Error::RelocationFailed),
                     }
                 }
-                State::Rotation0 => {
-                    // TODO
-                }
-                State::GettingClose => {
-                    // TODO
-                }
-                State::Rotation1 => {
-                    // TODO
+                State::Initializing => {
+                    use path::InitializeResult::*;
+                    match self.path.initialize(pose, self.parameters.light_radius) {
+                        Complete => self.state = State::Tracking,
+                        Drive(value) => return Ok(value),
+                        Failed => return Err(Error::OutOfPath),
+                    }
                 }
                 State::Tracking => {
                     match self.path.search_local(pose, self.parameters.light_radius) {
@@ -77,7 +77,7 @@ impl Task {
                         Err(LocalSearchError::OutOfPath) => return Err(Error::OutOfPath),
                         Err(LocalSearchError::Termination) => {
                             if self.path.next_segment(self.parameters.r#loop) {
-                                // TODO
+                                self.state = State::Initializing;
                             } else {
                                 return Err(Error::Complete);
                             }

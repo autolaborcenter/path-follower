@@ -1,9 +1,15 @@
 ﻿use nalgebra::{Complex, Isometry2, Vector2};
-use std::f32::consts::PI;
+use std::f32::consts::{FRAC_PI_2, PI};
 
 pub(super) struct Path {
     path: Vec<Vec<Isometry2<f32>>>,
     index: (usize, usize),
+}
+
+pub(super) enum InitializeResult {
+    Complete,
+    Drive(f32),
+    Failed,
 }
 
 pub(super) enum LocalSearchError {
@@ -118,8 +124,22 @@ impl Path {
         true
     }
 
-    pub fn target(&self) -> Isometry2<f32> {
-        self.path[self.index.0][self.index.1]
+    pub fn initialize(&self, pose: &Isometry2<f32>, light_radius: f32) -> InitializeResult {
+        // 机器人坐标系上的光斑中心
+        let c_light = Isometry2::new(Vector2::new(light_radius, 0.0), 0.0);
+        // 光斑坐标系上的目标位置
+        let target = (pose * c_light).inverse() * self.path[self.index.0][self.index.1];
+
+        let squared = light_radius.powi(2);
+        let p = target.translation.vector;
+        let d = target.rotation.angle();
+
+        // 条件良好，直接开始循线
+        if d.abs() < FRAC_PI_2 && p.norm_squared() < squared {
+            return InitializeResult::Complete;
+        }
+
+        todo!("初始化动作")
     }
 
     /// 计算面积比并转化到 [-π, π]
