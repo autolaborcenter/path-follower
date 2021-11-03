@@ -10,16 +10,17 @@ pub struct Task {
 }
 
 enum State {
-    Relocation,
-    Rotation0,
-    GettingClose,
-    Rotation1,
-    Tracking,
+    Relocation,   // 重新搜索
+    Rotation0,    // 面向目标
+    GettingClose, // 接近目标
+    Rotation1,    // 转向路线方向
+    Tracking,     // 连续循线
 }
 
 struct Parameters {
     search_radius: f32,
     light_radius: f32,
+    r#loop: bool,
 }
 
 struct Path {
@@ -33,6 +34,7 @@ impl Task {
             parameters: Parameters {
                 search_radius: 5.0,
                 light_radius: 1.0,
+                r#loop: false,
             },
             path: Path {
                 path: vec![path],
@@ -42,15 +44,14 @@ impl Task {
         }
     }
 
-    /// 从某点开始查找并返回路径的一个片段
-    pub fn search<'a>(&'a mut self, pose: &Isometry2<f32>) -> Option<PathSegment<'a>> {
+    /// 循线
+    pub fn tack<'a>(&'a mut self, pose: &Isometry2<f32>) -> Option<f32> {
         match self.state {
             State::Tracking => {
                 let mut segment = PathSegment {
                     to_robot: pose.inverse(),
                     slice: self.path.path[self.path.index.0].as_slice(),
                     index: self.path.index.1,
-                    may_loop: false,
                     light_radius: self.parameters.light_radius,
                 };
                 loop {
@@ -73,7 +74,7 @@ impl Task {
                     }
                 }
                 self.path.index.1 = segment.index;
-                Some(segment)
+                Some(PI * (0.5 - segment.size_proportion()))
             }
             _ => todo!(),
         }
@@ -86,7 +87,6 @@ pub struct PathSegment<'a> {
     to_robot: Isometry2<f32>,
     slice: &'a [Isometry2<f32>],
     index: usize,
-    may_loop: bool,
     light_radius: f32,
 }
 
@@ -147,11 +147,7 @@ impl Iterator for PathSegment<'_> {
     fn next(&mut self) -> Option<Self::Item> {
         self.index += 1;
         if self.index == self.slice.len() {
-            if self.may_loop {
-                self.index = 0;
-            } else {
-                return None;
-            }
+            return None;
         }
         Some(self.to_robot * self.slice[self.index])
     }

@@ -12,7 +12,6 @@ use task::{record, track, Task};
 pub struct Tracker {
     repo_path: PathBuf,
     task: Option<(String, Task)>,
-    pub pause: bool,
 }
 
 impl Tracker {
@@ -26,7 +25,6 @@ impl Tracker {
         Ok(Self {
             repo_path,
             task: None,
-            pause: false,
         })
     }
 
@@ -81,7 +79,6 @@ impl Tracker {
     pub fn record_to(&mut self, name: &str) -> std::io::Result<()> {
         if let Some((ref current, _)) = self.task {
             if name == current {
-                self.pause = false;
                 return Ok(());
             }
         }
@@ -98,7 +95,6 @@ impl Tracker {
     pub fn track(&mut self, name: &str) -> std::io::Result<()> {
         if let Some((ref current, _)) = self.task {
             if name == current {
-                self.pause = false;
                 return Ok(());
             }
         }
@@ -120,15 +116,10 @@ impl Tracker {
     pub fn put_pose(&mut self, pose: &Isometry2<f32>) -> Option<f32> {
         self.task.as_mut().and_then(|(_, ref mut task)| match task {
             Task::Record(record) => {
-                if !self.pause {
-                    record.append(pose);
-                }
+                record.append(pose);
                 None
             }
-            Task::Follow(follow) => follow
-                .search(pose)
-                .filter(|_| !self.pause)
-                .map(|seg| seg.size_proportion()),
+            Task::Follow(follow) => follow.tack(pose),
         })
     }
 }
