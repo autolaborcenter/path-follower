@@ -1,5 +1,4 @@
-﻿use super::normalize;
-use crate::nameof;
+﻿use crate::nameof;
 use nalgebra::Isometry2;
 use std::{f32::consts::PI, fs::File, io::Write, path::PathBuf};
 
@@ -27,7 +26,7 @@ impl Task {
             // 90° ~ 0°
             let rho = delta.translation.vector.norm();
             let theta = delta.rotation.angle();
-            let value = rho + normalize(theta, -PI..PI).abs() / PI * 0.3;
+            let value = rho + theta.abs() / PI * 0.3;
             if rho < 0.05 || value < 0.2 {
                 return;
             }

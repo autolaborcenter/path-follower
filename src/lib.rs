@@ -119,7 +119,7 @@ impl Tracker {
                 record.append(pose);
                 None
             }
-            Task::Follow(follow) => follow.tack(pose),
+            Task::Follow(follow) => follow.track(pose).ok(),
         })
     }
 }
