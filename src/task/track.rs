@@ -1,88 +1,82 @@
 use super::normalize;
 use nalgebra::{Isometry2, Translation2, Vector2};
-use std::{
-    f32::consts::{FRAC_PI_3, PI},
-    fmt::{Display, Formatter},
-};
+use std::f32::consts::{FRAC_PI_3, PI};
 
 /// 路径跟踪任务
 pub struct Task {
-    path: Vec<Isometry2<f32>>,
-    index: usize,
+    parameters: Parameters,
+    path: Path,
+    state: State,
+}
+
+enum State {
+    Relocation,
+    Rotation0,
+    GettingClose,
+    Rotation1,
+    Tracking,
+}
+
+struct Parameters {
+    search_radius: f32,
     light_radius: f32,
+}
+
+struct Path {
+    path: Vec<Vec<Isometry2<f32>>>,
+    index: (usize, usize),
 }
 
 impl Task {
     pub fn new(path: Vec<Isometry2<f32>>) -> Self {
         Self {
-            path,
-            index: 0,
-            light_radius: 1.0,
-        }
-    }
-
-    /// 路径长度
-    pub fn len(&self) -> usize {
-        self.path.len()
-    }
-
-    /// 跳过一些点
-    pub fn jump(&mut self, len: usize) {
-        self.index = (self.index + len) % self.path.len();
-    }
-
-    /// 跳到一个点
-    pub fn jump_to(&mut self, index: usize) -> Result<(), &str> {
-        if index < self.path.len() {
-            self.index = index;
-            Ok(())
-        } else {
-            Err("out of index")
+            parameters: Parameters {
+                search_radius: 5.0,
+                light_radius: 1.0,
+            },
+            path: Path {
+                path: vec![path],
+                index: (0, 0),
+            },
+            state: State::Tracking,
         }
     }
 
     /// 从某点开始查找并返回路径的一个片段
     pub fn search<'a>(&'a mut self, pose: &Isometry2<f32>) -> Option<PathSegment<'a>> {
-        let mut segment = PathSegment {
-            to_robot: pose.inverse(),
-            slice: self.path.as_slice(),
-            index: self.index,
-            may_loop: false,
-            light_radius: self.light_radius,
-        };
-        loop {
-            // 查找局部起始点
-            match segment.current() {
-                Some(p) => {
-                    let dir = p.rotation.angle();
-                    let pos = p.translation.vector;
-                    let pos_dir = pos.y.atan2(pos.x);
-                    if dir.abs() < FRAC_PI_3
-                        && pos_dir.abs() < FRAC_PI_3
-                        && pos.norm() < self.light_radius
-                    {
-                        break;
-                    } else {
-                        segment.next();
+        match self.state {
+            State::Tracking => {
+                let mut segment = PathSegment {
+                    to_robot: pose.inverse(),
+                    slice: self.path.path[self.path.index.0].as_slice(),
+                    index: self.path.index.1,
+                    may_loop: false,
+                    light_radius: self.parameters.light_radius,
+                };
+                loop {
+                    // 查找局部起始点
+                    match segment.current() {
+                        Some(p) => {
+                            let dir = p.rotation.angle();
+                            let pos = p.translation.vector;
+                            let pos_dir = pos.y.atan2(pos.x);
+                            if dir.abs() < FRAC_PI_3
+                                && pos_dir.abs() < FRAC_PI_3
+                                && pos.norm() < self.parameters.light_radius
+                            {
+                                break;
+                            } else {
+                                segment.next();
+                            }
+                        }
+                        None => return None,
                     }
                 }
-                None => return None,
+                self.path.index.1 = segment.index;
+                Some(segment)
             }
+            _ => todo!(),
         }
-        self.index = segment.index;
-        Some(segment)
-    }
-}
-
-impl Display for Task {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}%({}/{})",
-            (self.index * 100 / (self.path.len() - 1)),
-            self.index,
-            self.path.len() - 1
-        )
     }
 }
 
