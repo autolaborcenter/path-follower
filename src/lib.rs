@@ -1,4 +1,4 @@
-pub mod task;
+mod task;
 
 use nalgebra::{Isometry2, Vector2};
 use std::{
@@ -100,7 +100,7 @@ impl Tracker {
         }
         self.task = Pipe(name)
             .maybe(|it| self.read(it))?
-            .then(|it| track::Task::new(it))
+            .then(|it| track::Task::new(it, track::Parameters::DEFAULT))
             .then(|it| Task::Follow(it))
             .then(|it| Some((name.into(), it)))
             .finally();

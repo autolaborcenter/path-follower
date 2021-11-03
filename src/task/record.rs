@@ -1,11 +1,9 @@
-﻿use crate::nameof;
-use nalgebra::Isometry2;
+﻿use nalgebra::Isometry2;
 use std::{f32::consts::PI, fs::File, io::Write, path::PathBuf};
 
 /// 路径文件
 pub struct Task {
     file: File,
-    path: PathBuf,
     last: Option<Isometry2<f32>>,
 }
 
@@ -13,7 +11,6 @@ impl Task {
     pub fn new(path: PathBuf) -> std::io::Result<Self> {
         Ok(Self {
             file: File::create(&path)?,
-            path,
             last: None,
         })
     }
@@ -40,10 +37,5 @@ impl Task {
         );
         let _ = write!(self.file, "{}\n", text);
         println!("saved: {}", text);
-    }
-
-    /// 打开的文件名
-    pub fn name<'a>(&'a self) -> &'a str {
-        nameof(&self.path)
     }
 }

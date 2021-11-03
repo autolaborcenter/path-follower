@@ -16,6 +16,27 @@ pub(super) enum TrackError {
     Termination,
 }
 
+macro_rules! with_index {
+    ($it:expr) => {
+        $it.iter().enumerate()
+    };
+}
+
+macro_rules! update {
+    ($self:expr, $local:expr, $best:expr, $index:expr, $min:expr) => {
+        let p = $local.translation.vector.norm_squared();
+        let d = $local.rotation.angle().abs();
+
+        if p < $best && d < FRAC_PI_2 {
+            $self.index = $index;
+            return true;
+        } else if p < $min {
+            $self.index = $index;
+            $min = p;
+        }
+    };
+}
+
 impl Path {
     pub fn new(path: Vec<Vec<Isometry2<f32>>>) -> Self {
         Self {
@@ -33,7 +54,7 @@ impl Path {
         light_radius: f32,
         search_radius: f32,
         r#loop: bool,
-    ) -> Result<(), ()> {
+    ) -> bool {
         // 光斑中心
         let c = pose * Isometry2::new(Vector2::new(light_radius, 0.0), 0.0);
         // 到光斑坐标系的变换
@@ -41,96 +62,37 @@ impl Path {
 
         let best = light_radius.powi(2);
         let available = search_radius.powi(2);
+        let mut min = available;
 
-        let mut min: Option<(usize, usize, f32)> = None;
+        let ref path = self.path;
+        let ref local = path[self.index.0];
 
-        // 顺序遍历
-        for (j, p) in self.path[self.index.0]
-            .iter()
-            .enumerate()
-            .skip(self.index.1)
-        {
-            let local = to_local * p;
-            match CheckResult::check(&local, best, available) {
-                CheckResult::Best => {
-                    self.index.1 = j;
-                    return Ok(());
-                }
-                CheckResult::Available(p) => {
-                    if min.is_none() || p < min.unwrap().2 {
-                        min = Some((self.index.0, j, p));
-                    }
-                }
-                CheckResult::Nothing => {}
-            }
+        // 向后遍历
+        for (j, p) in with_index!(local).skip(self.index.1) {
+            update!(self, to_local * p, best, (self.index.0, j), min);
         }
-        for (i, segment) in self.path.iter().enumerate().skip(self.index.0 + 1) {
-            for (j, p) in segment.iter().enumerate().skip(self.index.1) {
-                let local = to_local * p;
-                match CheckResult::check(&local, best, available) {
-                    CheckResult::Best => {
-                        self.index = (i, j);
-                        return Ok(());
-                    }
-                    CheckResult::Available(p) => {
-                        if min.is_none() || p < min.unwrap().2 {
-                            min = Some((i, j, p));
-                        }
-                    }
-                    CheckResult::Nothing => {}
-                }
+        for (i, segment) in with_index!(path).skip(self.index.0 + 1) {
+            for (j, p) in with_index!(segment) {
+                update!(self, to_local * p, best, (i, j), min);
             }
         }
 
         // 禁止循环时失败
         if !r#loop {
-            return Err(());
+            return false;
         }
 
-        for (i, segment) in self.path.iter().enumerate().take(self.index.0) {
-            for (j, p) in segment.iter().enumerate().skip(self.index.1) {
-                let local = to_local * p;
-                match CheckResult::check(&local, best, available) {
-                    CheckResult::Best => {
-                        self.index = (i, j);
-                        return Ok(());
-                    }
-                    CheckResult::Available(p) => {
-                        if min.is_none() || p < min.unwrap().2 {
-                            min = Some((i, j, p));
-                        }
-                    }
-                    CheckResult::Nothing => {}
-                }
+        // 从前遍历
+        for (i, segment) in with_index!(path).take(self.index.0) {
+            for (j, p) in with_index!(segment) {
+                update!(self, to_local * p, best, (i, j), min);
             }
         }
-        for (j, p) in self.path[self.index.0]
-            .iter()
-            .enumerate()
-            .take(self.index.1)
-        {
-            let local = to_local * p;
-            match CheckResult::check(&local, best, available) {
-                CheckResult::Best => {
-                    self.index.1 = j;
-                    return Ok(());
-                }
-                CheckResult::Available(p) => {
-                    if min.is_none() || p < min.unwrap().2 {
-                        min = Some((self.index.0, j, p));
-                    }
-                }
-                CheckResult::Nothing => {}
-            }
+        for (j, p) in with_index!(local).take(self.index.1) {
+            update!(self, to_local * p, best, (self.index.0, j), min);
         }
 
-        if let Some((i, j, _)) = min {
-            self.index = (i, j);
-            Ok(())
-        } else {
-            // 重定位失败
-            Err(())
-        }
+        return min < available;
     }
 
     /// 在当前路段搜索并产生控制量
@@ -144,7 +106,6 @@ impl Path {
 
         // 遍历当前路段
         let first = self.path[self.index.0]
-            .as_slice()
             .iter()
             .enumerate()
             .skip(self.index.1)
@@ -198,7 +159,7 @@ impl Path {
             let theta = 3.0 * FRAC_PI_4 + theta; // 3π/4 + θ
             let (sin, cos) = theta.sin_cos();
             let vec = Vector2::new(light_radius + rho * cos, rho * sin);
-            vec.norm_squared()
+            vec.norm_squared() * 0.95 // 略微收缩确保可靠性
         };
 
         return if p.norm_squared() < squared {
@@ -280,26 +241,4 @@ fn dir_vector(p: &Isometry2<f32>) -> Vector2<f32> {
 #[inline]
 fn angle_of(p: Vector2<f32>) -> f32 {
     p.y.atan2(p.x)
-}
-
-enum CheckResult {
-    Best,
-    Available(f32),
-    Nothing,
-}
-
-impl CheckResult {
-    #[inline]
-    fn check(local: &Isometry2<f32>, best: f32, available: f32) -> Self {
-        let p = local.translation.vector.norm_squared();
-        let d = local.rotation.angle().abs();
-
-        if p < best && d < FRAC_PI_2 {
-            Self::Best
-        } else if p < available {
-            Self::Available(p)
-        } else {
-            Self::Nothing
-        }
-    }
 }

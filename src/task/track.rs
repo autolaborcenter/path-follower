@@ -2,7 +2,7 @@ use nalgebra::Isometry2;
 
 mod path;
 
-use path::{Path, TrackError};
+use path::Path;
 
 /// 路径跟踪任务
 pub struct Task {
@@ -19,28 +19,35 @@ pub enum Error {
     Complete,         // 任务完成
 }
 
+/// 循径参数
+pub struct Parameters {
+    search_radius: f32,
+    light_radius: f32,
+    r#loop: bool,
+    auto_reinitialize: bool,
+}
+
 enum State {
     Relocating,   // 重新搜索
     Initializing, // 初始化
     Tracking,     // 连续循线
 }
 
-struct Parameters {
-    search_radius: f32,
-    light_radius: f32,
-    r#loop: bool,
+impl Parameters {
+    pub const DEFAULT: Self = Self {
+        search_radius: 5.0,
+        light_radius: 1.0,
+        r#loop: false,
+        auto_reinitialize: true,
+    };
 }
 
 impl Task {
-    pub fn new(path: Vec<Isometry2<f32>>) -> Self {
+    pub fn new(path: Vec<Isometry2<f32>>, parameters: Parameters) -> Self {
         Self {
-            parameters: Parameters {
-                search_radius: 5.0,
-                light_radius: 1.0,
-                r#loop: false,
-            },
+            parameters,
             path: Path::new(vec![path]),
-            state: State::Tracking,
+            state: State::Relocating,
         }
     }
 
@@ -54,14 +61,15 @@ impl Task {
         loop {
             match self.state {
                 State::Relocating => {
-                    match self.path.relocate(
+                    if self.path.relocate(
                         pose,
                         self.parameters.light_radius,
                         self.parameters.search_radius,
                         self.parameters.r#loop,
                     ) {
-                        Ok(()) => self.state = State::Initializing,
-                        Err(()) => return Err(Error::RelocationFailed),
+                        self.state = State::Initializing;
+                    } else {
+                        return Err(Error::RelocationFailed);
                     }
                 }
                 State::Initializing => {
@@ -72,10 +80,17 @@ impl Task {
                     }
                 }
                 State::Tracking => {
+                    use path::TrackError::*;
                     match self.path.track_within(pose, self.parameters.light_radius) {
                         Ok(value) => return Ok((1.0, value)),
-                        Err(TrackError::OutOfPath) => return Err(Error::OutOfPath),
-                        Err(TrackError::Termination) => {
+                        Err(OutOfPath) => {
+                            if self.parameters.auto_reinitialize {
+                                self.state = State::Initializing;
+                            } else {
+                                return Err(Error::OutOfPath);
+                            }
+                        }
+                        Err(Termination) => {
                             if self.path.next_segment(self.parameters.r#loop) {
                                 self.state = State::Initializing;
                             } else {
