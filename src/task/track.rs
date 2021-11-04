@@ -43,10 +43,15 @@ impl Parameters {
 }
 
 impl Task {
-    pub fn new(path: Vec<Isometry2<f32>>, parameters: Parameters) -> Self {
+    pub fn new<I>(path: I, parameters: Parameters) -> Self
+    where
+        I: IntoIterator<Item = Isometry2<f32>>,
+    {
+        let path = Path::new(vec![path.into_iter().collect()]);
+        // TODO 划分路径
         Self {
             parameters,
-            path: Path::new(vec![path]),
+            path,
             state: State::Relocating,
         }
     }
