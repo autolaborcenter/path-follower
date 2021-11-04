@@ -68,28 +68,26 @@ impl Path {
         let ref local = path[self.index.0];
 
         // 向后遍历
-        for (j, p) in with_index!(local).skip(self.index.1) {
-            update!(self, to_local * p, best, (self.index.0, j), min);
-        }
-        for (i, segment) in with_index!(path).skip(self.index.0 + 1) {
-            for (j, p) in with_index!(segment) {
-                update!(self, to_local * p, best, (i, j), min);
+        {
+            for (j, p) in with_index!(local).skip(self.index.1) {
+                update!(self, to_local * p, best, (self.index.0, j), min);
+            }
+            for (i, segment) in with_index!(path).skip(self.index.0 + 1) {
+                for (j, p) in with_index!(segment) {
+                    update!(self, to_local * p, best, (i, j), min);
+                }
             }
         }
-
-        // 禁止循环时失败
-        if !r#loop {
-            return false;
-        }
-
-        // 从前遍历
-        for (i, segment) in with_index!(path).take(self.index.0) {
-            for (j, p) in with_index!(segment) {
-                update!(self, to_local * p, best, (i, j), min);
+        // 支持循环时从前遍历
+        if r#loop {
+            for (i, segment) in with_index!(path).take(self.index.0) {
+                for (j, p) in with_index!(segment) {
+                    update!(self, to_local * p, best, (i, j), min);
+                }
             }
-        }
-        for (j, p) in with_index!(local).take(self.index.1) {
-            update!(self, to_local * p, best, (self.index.0, j), min);
+            for (j, p) in with_index!(local).take(self.index.1) {
+                update!(self, to_local * p, best, (self.index.0, j), min);
+            }
         }
 
         return min < available;
