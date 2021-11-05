@@ -66,13 +66,10 @@ impl Tracker {
 
     /// 读取指定路径
     pub fn read(&self, name: &str) -> std::io::Result<Vec<Isometry2<f32>>> {
-        Pipe(name)
-            .then(|it| self.build_absolute(it))
-            .maybe(|it| File::open(it))?
-            .then(|it| BufReader::new(it))
-            .maybe(|it| Self::read_to_string(it))?
-            .then(|it| Ok(it.lines().filter_map(parse_isometry2).collect()))
-            .finally()
+        Ok(self.build_absolute(name))
+            .and_then(|it| File::open(it))
+            .and_then(|it| Self::read_to_string(BufReader::new(it)))
+            .map(|it| it.lines().filter_map(parse_isometry2).collect())
     }
 
     /// 开始录制
@@ -82,13 +79,9 @@ impl Tracker {
                 return Ok(());
             }
         }
-        self.task = Pipe(name)
-            .then(|it| self.build_absolute(it))
-            .maybe(|it| record::Task::new(it))?
-            .then(|it| Task::Record(it))
-            .then(|it| Some((name.into(), it)))
-            .finally();
-        Ok(())
+        Ok(self.build_absolute(name))
+            .and_then(|it| record::Task::new(it))
+            .map(|it| self.task = Some((name.into(), Task::Record(it))))
     }
 
     /// 开始循径
@@ -98,13 +91,9 @@ impl Tracker {
                 return Ok(());
             }
         }
-        self.task = Pipe(name)
-            .maybe(|it| self.read(it))?
-            .then(|it| track::Task::new(it, track::Parameters::DEFAULT))
-            .then(|it| Task::Follow(it))
-            .then(|it| Some((name.into(), it)))
-            .finally();
-        Ok(())
+        self.read(name)
+            .map(|it| track::Task::new(it, track::Parameters::DEFAULT))
+            .map(|it| self.task = Some((name.into(), Task::Follow(it))))
     }
 
     /// 取消任务
@@ -161,29 +150,4 @@ fn test_parse() {
     );
     assert_eq!(parse_isometry2("1,2,3,x"), None);
     assert_eq!(parse_isometry2(""), None);
-}
-
-struct Pipe<T>(T);
-
-impl<T> Pipe<T> {
-    #[inline]
-    fn then<F, U>(self, f: F) -> Pipe<U>
-    where
-        F: FnOnce(T) -> U,
-    {
-        Pipe(f(self.0))
-    }
-
-    #[inline]
-    fn maybe<F, U>(self, f: F) -> std::io::Result<Pipe<U>>
-    where
-        F: FnOnce(T) -> std::io::Result<U>,
-    {
-        Ok(Pipe(f(self.0)?))
-    }
-
-    #[inline]
-    fn finally(self) -> T {
-        self.0
-    }
 }
