@@ -1,11 +1,13 @@
-mod task;
-
 use nalgebra::{Isometry2, Vector2};
 use std::{
     fs::File,
-    io::{BufReader, Read},
     path::{Path, PathBuf},
 };
+
+mod file_stream;
+mod task;
+
+use file_stream::IntoFileStream;
 use task::{record, track, Task};
 
 /// 任务控制器
@@ -58,18 +60,15 @@ impl Tracker {
         path
     }
 
-    fn read_to_string(mut reader: BufReader<File>) -> std::io::Result<String> {
-        let mut contents = String::new();
-        reader.read_to_string(&mut contents)?;
-        Ok(contents)
+    fn read_stream(&self, name: &str) -> std::io::Result<impl IntoIterator<Item = Isometry2<f32>>> {
+        Ok(self.build_absolute(name))
+            .and_then(|it| File::open(it))
+            .map(|it| IntoFileStream(it))
     }
 
     /// 读取指定路径
     pub fn read(&self, name: &str) -> std::io::Result<Vec<Isometry2<f32>>> {
-        Ok(self.build_absolute(name))
-            .and_then(|it| File::open(it))
-            .and_then(|it| Self::read_to_string(BufReader::new(it)))
-            .map(|it| it.lines().filter_map(parse_isometry2).collect())
+        self.read_stream(name).map(|i| i.into_iter().collect())
     }
 
     /// 开始录制
@@ -91,7 +90,7 @@ impl Tracker {
                 return Ok(());
             }
         }
-        self.read(name)
+        self.read_stream(name)
             .map(|it| track::Task::new(it, track::Parameters::DEFAULT))
             .map(|it| self.task = Some((name.into(), Task::Follow(it))))
     }
