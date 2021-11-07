@@ -1,4 +1,4 @@
-use nalgebra::Isometry2;
+use nalgebra::{Isometry2, Vector2};
 
 mod path;
 
@@ -47,11 +47,27 @@ impl Task {
     where
         I: IntoIterator<Item = Isometry2<f32>>,
     {
-        let path = Path::new(vec![path.into_iter().collect()]);
-        // TODO 划分路径
+        let c = Isometry2::new(Vector2::new(parameters.light_radius, 0.0), 0.0);
+        let squared = parameters.light_radius.powi(2);
+
+        let mut source = path.into_iter();
+        let mut path = vec![vec![]];
+        if let Some(mut reference) = source.next() {
+            path.last_mut().unwrap().push(reference);
+            for p in source {
+                let to_local = (reference * c).inverse();
+                let local = to_local * p;
+                if local.translation.vector.norm_squared() < squared {
+                    path.last_mut().unwrap().push(p);
+                } else {
+                    path.push(vec![p]);
+                }
+                reference = p;
+            }
+        }
         Self {
             parameters,
-            path,
+            path: Path::new(path),
             state: State::Relocating,
         }
     }
