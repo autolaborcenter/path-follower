@@ -174,12 +174,19 @@ impl Path {
                 )
             }
         } else {
+            let dir = -p[1].atan2(p[0].abs());
             // 位置条件不满足，逼近
             InitializeResult::Drive(
                 // 速度
-                f32::min(1.0, p.norm() / 2.0) * p[0].signum(),
+                f32::min(1.0, p.norm() * 0.2),
                 // 方向
-                -p[1].atan2(p[0].abs()),
+                if dir < -FRAC_PI_2 {
+                    -FRAC_PI_2
+                } else if FRAC_PI_2 < dir {
+                    FRAC_PI_2
+                } else {
+                    dir
+                },
             )
         };
     }
