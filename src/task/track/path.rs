@@ -166,27 +166,14 @@ impl Path {
                 InitializeResult::Complete
             } else {
                 // 方向条件不满足，原地转
-                InitializeResult::Drive(
-                    // 移动方向
-                    p[0].signum(),
-                    // 转向方向
-                    -p[0].signum() * d.signum() * FRAC_PI_2,
-                )
+                InitializeResult::Drive(1.0, d.signum() * -FRAC_PI_2)
             }
         } else {
             let dir = -p[1].atan2(p[0].abs());
             // 位置条件不满足，逼近
             InitializeResult::Drive(
-                // 速度
                 f32::min(1.0, p.norm() * 0.2),
-                // 方向
-                if dir < -FRAC_PI_2 {
-                    -FRAC_PI_2
-                } else if FRAC_PI_2 < dir {
-                    FRAC_PI_2
-                } else {
-                    dir
-                },
+                dir.clamp(-FRAC_PI_2, FRAC_PI_2),
             )
         };
     }
