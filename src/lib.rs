@@ -42,7 +42,7 @@ impl Tracker {
                 .filter_map(|r| r.ok())
                 .filter_map(|d| {
                     let path = d.path();
-                    if path.is_file() && path.ends_with(".path") {
+                    if path.is_file() && path.extension().map_or(false, |s| s == "path") {
                         Some(nameof(&path).to_string())
                     } else {
                         None

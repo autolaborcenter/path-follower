@@ -1,4 +1,5 @@
 use nalgebra::{Isometry2, Vector2};
+use std::f32::consts::FRAC_PI_2;
 
 mod path;
 
@@ -47,7 +48,7 @@ impl Task {
     where
         I: IntoIterator<Item = Isometry2<f32>>,
     {
-        let c = Isometry2::new(Vector2::new(parameters.light_radius, 0.0), 0.0);
+        let c = Vector2::new(parameters.light_radius, 0.0);
         let squared = parameters.light_radius.powi(2);
 
         let mut source = path.into_iter();
@@ -55,9 +56,10 @@ impl Task {
         if let Some(mut reference) = source.next() {
             path.last_mut().unwrap().push(reference);
             for p in source {
-                let to_local = (reference * c).inverse();
-                let local = to_local * p;
-                if local.translation.vector.norm_squared() < squared {
+                let local = reference.inv_mul(&p);
+                if (local.translation.vector - c).norm_squared() < squared
+                    && local.rotation.angle().abs() < FRAC_PI_2
+                {
                     path.last_mut().unwrap().push(p);
                 } else {
                     path.push(vec![p]);
