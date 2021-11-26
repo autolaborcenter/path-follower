@@ -172,7 +172,7 @@ impl Path {
             let dir = -p[1].atan2(p[0].abs());
             // 位置条件不满足，逼近
             InitializeResult::Drive(
-                f32::min(1.0, p.norm() * 0.2),
+                f32::min(1.0, p.norm() * 0.5),
                 dir.clamp(-FRAC_PI_2, FRAC_PI_2),
             )
         };

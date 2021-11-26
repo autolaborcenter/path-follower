@@ -36,7 +36,7 @@ enum State {
 impl Parameters {
     pub const DEFAULT: Self = Self {
         search_radius: 5.0,
-        light_radius: 1.0,
+        light_radius: 0.4,
         r#loop: false,
         auto_reinitialize: true,
     };
@@ -74,6 +74,7 @@ impl Task {
     }
 
     /// 下一次更新时进行重定位
+    #[allow(dead_code)]
     pub fn relocate(&mut self) {
         self.state = State::Relocating;
     }
