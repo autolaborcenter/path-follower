@@ -1,4 +1,6 @@
-use nalgebra::Isometry2;
+use std::f32::consts::FRAC_PI_2;
+
+use nalgebra::{Isometry2, Vector2};
 
 mod path;
 
@@ -43,32 +45,42 @@ impl Parameters {
 }
 
 impl Task {
+    /// 读取一条路径，检测其中的尖点
     pub fn new<I>(path: I, parameters: Parameters) -> Self
     where
         I: IntoIterator<Item = Isometry2<f32>>,
     {
-        // let c = Vector2::new(parameters.light_radius, 0.0);
-        // let squared = parameters.light_radius.powi(2);
+        // 光斑中心位置
+        let c = Vector2::new(parameters.light_radius, 0.0);
+        // 光斑范围
+        let squared = parameters.light_radius.powi(2);
 
-        // let mut source = path.into_iter();
-        // let mut path = vec![vec![]];
-        // if let Some(mut reference) = source.next() {
-        //     path.last_mut().unwrap().push(reference);
-        //     for p in source {
-        //         let local = reference.inv_mul(&p);
-        //         if (local.translation.vector - c).norm_squared() < squared
-        //             && local.rotation.angle().abs() < FRAC_PI_2
-        //         {
-        //             path.last_mut().unwrap().push(p);
-        //         } else {
-        //             path.push(vec![p]);
-        //         }
-        //         reference = p;
-        //     }
-        // }
+        let mut source = path.into_iter();
+        let mut path = vec![vec![]];
+        if let Some(mut reference) = source.next() {
+            // reference 理解为上一个点的位姿，即处理这一个点时机器人预期的位姿
+            path.last_mut().unwrap().push(reference);
+            for p in source {
+                // 使用 reference 逆变换，即将这一个点变换到理想的机器人坐标系
+                let local = reference.inv_mul(&p);
+                // 如果这一个点在光斑内 且 与机器人差不多同向
+                // 认为是一般的点
+                if (local.translation.vector - c).norm_squared() < squared
+                    && local.rotation.angle().abs() < FRAC_PI_2
+                {
+                    path.last_mut().unwrap().push(p);
+                }
+                // 否则判定为尖点，另起一段路
+                else {
+                    path.push(vec![p]);
+                }
+                // 更新参考点
+                reference = p;
+            }
+        }
         Self {
             parameters,
-            path: Path::new(vec![path.into_iter().collect()]),
+            path: Path::new(path),
             state: State::Relocating,
         }
     }
