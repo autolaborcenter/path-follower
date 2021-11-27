@@ -1,4 +1,4 @@
-﻿use nalgebra::{Complex, ComplexField, Isometry2, Point2, Vector2};
+﻿use nalgebra::{Complex,  Isometry2, Point2, Vector2};
 use std::f32::consts::{FRAC_PI_2, FRAC_PI_4, PI, SQRT_2};
 
 pub(super) struct Path {
