@@ -1,5 +1,3 @@
-use std::f32::consts::FRAC_PI_2;
-
 use nalgebra::{Isometry2, Vector2};
 
 mod path;
@@ -23,10 +21,11 @@ pub enum Error {
 
 /// 循径参数
 pub struct Parameters {
-    search_radius: f32,
-    light_radius: f32,
-    r#loop: bool,
-    auto_reinitialize: bool,
+    search_radius: f32,      //
+    light_radius: f32,       //
+    r#loop: bool,            //
+    auto_reinitialize: bool, //
+    tip_ignore: usize,       // 是否严格循尖点
 }
 
 enum State {
@@ -41,6 +40,7 @@ impl Parameters {
         light_radius: 0.4,
         r#loop: false,
         auto_reinitialize: true,
+        tip_ignore: 10,
     };
 }
 
@@ -62,17 +62,27 @@ impl Task {
             path.last_mut().unwrap().push(reference);
             for p in source {
                 // 使用 reference 逆变换，即将这一个点变换到理想的机器人坐标系
-                let local = reference.inv_mul(&p);
+                let segment = path.last_mut().unwrap();
                 // 如果这一个点在光斑内 且 与机器人差不多同向
                 // 认为是一般的点
-                if (local.translation.vector - c).norm_squared() < squared
-                    && local.rotation.angle().abs() < FRAC_PI_2
-                {
-                    path.last_mut().unwrap().push(p);
+                if is_continious(&reference.inv_mul(&p), c, squared) {
+                    segment.push(p);
                 }
-                // 否则判定为尖点，另起一段路
+                // 判定为尖点
                 else {
-                    path.push(vec![p]);
+                    // 反向检查，看是否跳过一些点可以实现连续
+                    let remain = segment
+                        .iter()
+                        .rev()
+                        .take(parameters.tip_ignore + 1)
+                        .skip_while(|r| !is_continious(&r.inv_mul(&p), c, squared))
+                        .count();
+                    if remain > 0 {
+                        segment.truncate(segment.len() - (parameters.tip_ignore + 1) + remain);
+                        segment.push(p);
+                    } else {
+                        path.push(vec![p]);
+                    }
                 }
                 // 更新参考点
                 reference = p;
@@ -85,8 +95,16 @@ impl Task {
         }
     }
 
+    /// 用于观察分段后的路径
+    #[allow(dead_code)]
+    #[inline]
+    pub fn view<'a>(&'a self) -> &'a Vec<Vec<Isometry2<f32>>> {
+        &self.path.inner
+    }
+
     /// 下一次更新时进行重定位
     #[allow(dead_code)]
+    #[inline]
     pub fn relocate(&mut self) {
         self.state = State::Relocating;
     }
@@ -137,4 +155,11 @@ impl Task {
             }
         }
     }
+}
+
+#[inline]
+fn is_continious(local: &Isometry2<f32>, c: Vector2<f32>, squared: f32) -> bool {
+    use std::f32::consts::FRAC_PI_3;
+    (local.translation.vector - c).norm_squared() < squared
+        && local.rotation.angle().abs() < FRAC_PI_3
 }

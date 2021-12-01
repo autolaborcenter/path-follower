@@ -60,15 +60,17 @@ impl Tracker {
         path
     }
 
-    fn read_stream(&self, name: &str) -> std::io::Result<impl IntoIterator<Item = Isometry2<f32>>> {
+    fn read_stream(&self, name: &str) -> std::io::Result<track::Task> {
         Ok(self.build_absolute(name))
             .and_then(|it| File::open(it))
             .map(|it| IntoFileStream(it))
+            .map(|it| track::Task::new(it, track::Parameters::DEFAULT))
     }
 
     /// 读取指定路径
     pub fn read(&self, name: &str) -> std::io::Result<Vec<Isometry2<f32>>> {
-        self.read_stream(name).map(|i| i.into_iter().collect())
+        self.read_stream(name)
+            .map(|it| it.view().iter().flat_map(|v| v).map(|x| *x).collect())
     }
 
     /// 开始录制
@@ -91,7 +93,6 @@ impl Tracker {
             }
         }
         self.read_stream(name)
-            .map(|it| track::Task::new(it, track::Parameters::DEFAULT))
             .map(|it| self.task = Some((name.into(), Task::Follow(it))))
     }
 
