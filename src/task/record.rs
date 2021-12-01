@@ -1,5 +1,5 @@
 ﻿use nalgebra::Isometry2;
-use std::{f32::consts::PI, fs::File, io::Write, path::PathBuf};
+use std::{f32::consts::PI, fs::File, io::Write};
 
 /// 路径文件
 pub struct Task {
@@ -8,9 +8,9 @@ pub struct Task {
 }
 
 impl Task {
-    pub fn new(path: PathBuf) -> std::io::Result<Self> {
+    pub fn new(path: &async_std::path::Path) -> std::io::Result<Self> {
         Ok(Self {
-            file: File::create(&path)?,
+            file: File::create(path)?,
             last: None,
         })
     }

@@ -7,3 +7,4 @@ readme = "README.md"
 
 [dependencies]
 nalgebra = "*"
+async-std = "*"

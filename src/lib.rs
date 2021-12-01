@@ -1,13 +1,10 @@
 use nalgebra::{Isometry2, Vector2};
-use std::{
-    fs::File,
-    path::{Path, PathBuf},
-};
+use std::path::PathBuf;
 
-mod file_stream;
+mod path;
 mod task;
 
-use file_stream::IntoFileStream;
+pub use path::*;
 use task::{record, track, Task};
 
 /// 任务控制器
@@ -30,11 +27,6 @@ impl Tracker {
         })
     }
 
-    /// 获取仓库路径
-    pub fn path<'a>(&'a self) -> &'a Path {
-        self.repo_path.as_path()
-    }
-
     /// 列出仓库中的路径文件
     pub fn list(&self) -> Vec<String> {
         match std::fs::read_dir(&self.repo_path) {
@@ -54,16 +46,15 @@ impl Tracker {
     }
 
     /// 从名字构造文件的绝对路径
-    fn build_absolute(&self, name: &str) -> PathBuf {
+    fn build_absolute(&self, name: &str) -> async_std::path::PathBuf {
         let mut path = self.repo_path.clone();
         path.push(format!("{}.path", name));
-        path
+        path.into()
     }
 
     fn read_stream(&self, name: &str) -> std::io::Result<track::Task> {
         Ok(self.build_absolute(name))
-            .and_then(|it| File::open(it))
-            .map(|it| IntoFileStream(it))
+            .and_then(|it| async_std::task::block_on(PathFile::open(it.as_path())))
             .map(|it| track::Task::new(it, track::Parameters::DEFAULT))
     }
 
@@ -81,7 +72,7 @@ impl Tracker {
             }
         }
         Ok(self.build_absolute(name))
-            .and_then(|it| record::Task::new(it))
+            .and_then(|it| record::Task::new(it.as_path()))
             .map(|it| self.task = Some((name.into(), Task::Record(it))))
     }
 
@@ -125,29 +116,19 @@ fn nameof<'a>(path: &'a PathBuf) -> &'a str {
     &name.to_str().unwrap()[..name.len() - 5]
 }
 
-/// 从字符串解析等距映射
-fn parse_isometry2(s: &str) -> Option<Isometry2<f32>> {
-    let mut i = 0;
-    let mut numbers = [0.0; 3];
-    for r in s.split(',').map(|s| s.trim().parse::<f32>()) {
-        if i >= numbers.len() || r.is_err() {
-            return None;
-        }
-        numbers[i] = r.unwrap();
-        i += 1;
+#[inline]
+const fn isometry(x: f32, y: f32, cos: f32, sin: f32) -> Isometry2<f32> {
+    use nalgebra::{Complex, Translation, Unit};
+    Isometry2 {
+        translation: Translation {
+            vector: vector(x, y),
+        },
+        rotation: Unit::new_unchecked(Complex { re: cos, im: sin }),
     }
-    Some(Isometry2::new(
-        Vector2::new(numbers[0], numbers[1]),
-        numbers[2],
-    ))
 }
 
-#[test]
-fn test_parse() {
-    assert_eq!(
-        parse_isometry2("-1,+2,-0"),
-        Some(Isometry2::new(Vector2::new(-1.0, 2.0), 0.0))
-    );
-    assert_eq!(parse_isometry2("1,2,3,x"), None);
-    assert_eq!(parse_isometry2(""), None);
+#[inline]
+const fn vector(x: f32, y: f32) -> Vector2<f32> {
+    use nalgebra::{ArrayStorage, Vector};
+    Vector::from_array_storage(ArrayStorage([[x, y]]))
 }

@@ -1,4 +1,4 @@
-use nalgebra::{Isometry2, Vector2};
+use nalgebra::Isometry2;
 
 mod path;
 
@@ -20,6 +20,7 @@ pub enum Error {
 }
 
 /// 循径参数
+#[derive(Clone, Copy)]
 pub struct Parameters {
     search_radius: f32,      //
     light_radius: f32,       //
@@ -46,51 +47,12 @@ impl Parameters {
 
 impl Task {
     /// 读取一条路径，检测其中的尖点
-    pub fn new<I>(path: I, parameters: Parameters) -> Self
-    where
-        I: IntoIterator<Item = Isometry2<f32>>,
-    {
-        // 光斑中心位置
-        let c = Vector2::new(parameters.light_radius, 0.0);
-        // 光斑范围
-        let squared = parameters.light_radius.powi(2);
-
-        let mut source = path.into_iter();
-        let mut path = vec![vec![]];
-        if let Some(mut reference) = source.next() {
-            // reference 理解为上一个点的位姿，即处理这一个点时机器人预期的位姿
-            path.last_mut().unwrap().push(reference);
-            for p in source {
-                // 使用 reference 逆变换，即将这一个点变换到理想的机器人坐标系
-                let segment = path.last_mut().unwrap();
-                // 如果这一个点在光斑内 且 与机器人差不多同向
-                // 认为是一般的点
-                if is_continious(&reference.inv_mul(&p), c, squared) {
-                    segment.push(p);
-                }
-                // 判定为尖点
-                else {
-                    // 反向检查，看是否跳过一些点可以实现连续
-                    let remain = segment
-                        .iter()
-                        .rev()
-                        .take(parameters.tip_ignore + 1)
-                        .skip_while(|r| !is_continious(&r.inv_mul(&p), c, squared))
-                        .count();
-                    if remain > 0 {
-                        segment.truncate(segment.len() - (parameters.tip_ignore + 1) + remain);
-                        segment.push(p);
-                    } else {
-                        path.push(vec![p]);
-                    }
-                }
-                // 更新参考点
-                reference = p;
-            }
-        }
+    pub fn new(path: impl IntoIterator<Item = Isometry2<f32>>, parameters: Parameters) -> Self {
         Self {
             parameters,
-            path: Path::new(path),
+            path: Path::new(
+                crate::Path::new(path, parameters.light_radius, parameters.tip_ignore).0,
+            ),
             state: State::Relocating,
         }
     }
@@ -155,11 +117,4 @@ impl Task {
             }
         }
     }
-}
-
-#[inline]
-fn is_continious(local: &Isometry2<f32>, c: Vector2<f32>, squared: f32) -> bool {
-    use std::f32::consts::FRAC_PI_3;
-    (local.translation.vector - c).norm_squared() < squared
-        && local.rotation.angle().abs() < FRAC_PI_3
 }
