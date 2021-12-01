@@ -1,4 +1,5 @@
-﻿use nalgebra::{Complex, Isometry2, Point2, Vector2};
+﻿use crate::{isometry, point, vector};
+use nalgebra::{Complex, Isometry2, Point2, Vector2};
 use std::f32::consts::{FRAC_PI_2, FRAC_PI_4, PI, SQRT_2};
 
 pub(super) struct Path {
@@ -56,7 +57,7 @@ impl Path {
         r#loop: bool,
     ) -> bool {
         // 光斑中心
-        let c = pose * Isometry2::new(Vector2::new(light_radius, 0.0), 0.0);
+        let c = pose * isometry(light_radius, 0.0, 1.0, 0.0);
         // 到光斑坐标系的变换
         let to_local = c.inverse();
 
@@ -99,7 +100,7 @@ impl Path {
         pose: &Isometry2<f32>,
         light_radius: f32,
     ) -> Result<f32, TrackError> {
-        let c = (pose * Point2::from(Vector2::new(light_radius, 0.0))).coords;
+        let c = (pose * point(light_radius, 0.0)).coords;
         let squared = light_radius.powi(2);
 
         // 遍历当前路段
@@ -148,12 +149,12 @@ impl Path {
             let rho = SQRT_2 * light_radius;
             let theta = 3.0 * FRAC_PI_4 + theta; // 3π/4 + θ
             let (sin, cos) = theta.sin_cos();
-            let vec = Vector2::new(light_radius + rho * cos, rho * sin);
+            let vec = vector(light_radius + rho * cos, rho * sin);
             vec.norm_squared() * 0.95 // 略微收缩确保可靠性
         };
 
         // 光斑中心相对机器人的位姿
-        let c_light = Isometry2::new(Vector2::new(light_radius, 0.0), 0.0);
+        let c_light = isometry(light_radius, 0.0, 1.0, 0.0);
         // 机器人坐标系上机器人应该到达的目标位置
         let target = pose.inverse() * (self.inner[self.index.0][self.index.1] * c_light.inverse());
 
@@ -230,7 +231,7 @@ fn intersection(p: &Isometry2<f32>, r_squared: f32, signnum: f32) -> Vector2<f32
 #[inline]
 fn dir_vector(p: &Isometry2<f32>) -> Vector2<f32> {
     let Complex { re, im } = *p.rotation.complex();
-    Vector2::new(re, im)
+    vector(re, im)
 }
 
 /// 求方向角

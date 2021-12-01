@@ -1,4 +1,4 @@
-use nalgebra::{Isometry2, Vector2};
+use nalgebra::{Isometry2, Point2, Vector2};
 use std::path::PathBuf;
 
 mod path;
@@ -124,6 +124,13 @@ const fn isometry(x: f32, y: f32, cos: f32, sin: f32) -> Isometry2<f32> {
             vector: vector(x, y),
         },
         rotation: Unit::new_unchecked(Complex { re: cos, im: sin }),
+    }
+}
+
+#[inline]
+const fn point(x: f32, y: f32) -> Point2<f32> {
+    Point2 {
+        coords: vector(x, y),
     }
 }
 

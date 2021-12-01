@@ -40,51 +40,55 @@ impl Path {
         light_radius: f32,
         tip_ignore: usize,
     ) -> Self {
-        // 光斑中心位置
-        let c = vector(light_radius, 0.0);
-        // 光斑范围
-        let squared = light_radius.powi(2);
-
         let mut source = path.into_iter();
-        let mut result = Self(vec![vec![]]);
-        if let Some(mut reference) = source.next() {
-            // reference 理解为上一个点的位姿，即处理这一个点时机器人预期的位姿
-            result.0.last_mut().unwrap().push(reference);
+        let mut result = vec![vec![]];
+        if let Some(r) = source.next() {
+            // 光斑中心位置
+            let c = vector(light_radius, 0.0);
+            // 光斑范围
+            let squared = light_radius.powi(2);
+
+            result.last_mut().unwrap().push(r);
             for p in source {
                 // 使用 reference 逆变换，即将这一个点变换到理想的机器人坐标系
-                let segment = result.0.last_mut().unwrap();
-                // 如果这一个点在光斑内 且 与机器人差不多同向
-                // 认为是一般的点
-                if is_continious(&reference.inv_mul(&p), c, squared) {
+                let segment = result.last_mut().unwrap();
+                if is_continious(&segment.last().unwrap().inv_mul(&p), c, squared) {
                     segment.push(p);
-                }
-                // 判定为尖点
-                else {
-                    // 反向检查，看是否跳过一些点可以实现连续
-                    let remain = segment
-                        .iter()
-                        .rev()
-                        .take(tip_ignore + 1)
-                        .skip_while(|r| !is_continious(&r.inv_mul(&p), c, squared))
-                        .count();
+                } else {
+                    // 反向检查，看跳过一些点能否实现连续
+                    let remain = if tip_ignore > 0 {
+                        segment
+                            .iter()
+                            .rev()
+                            .take(tip_ignore + 1)
+                            .skip_while(|r| !is_continious(&r.inv_mul(&p), c, squared))
+                            .count()
+                    } else {
+                        0
+                    };
                     if remain > 0 {
                         segment.truncate(segment.len() - (tip_ignore + 1) + remain);
                         segment.push(p);
                     } else {
-                        result.0.push(vec![p]);
+                        result.push(vec![p]);
                     }
                 }
-                // 更新参考点
-                reference = p;
             }
         }
-        result
+        Self(result)
+    }
+
+    #[inline]
+    pub fn slice<'a>(&'a self, i: (usize, usize)) -> &'a [Isometry2<f32>] {
+        &self.0[i.0][i.1..]
     }
 }
 
 #[inline]
 fn is_continious(local: &Isometry2<f32>, c: Vector2<f32>, squared: f32) -> bool {
     use std::f32::consts::FRAC_PI_3;
+    // 如果这一个点在光斑内 且 与机器人差不多同向
+    // 认为是一般的点
     (local.translation.vector - c).norm_squared() < squared
         && local.rotation.angle().abs() < FRAC_PI_3
 }
