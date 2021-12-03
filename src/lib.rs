@@ -7,6 +7,44 @@ mod task;
 pub use path::*;
 use task::{record, track, Task};
 
+/// 扇形
+#[derive(Clone, Copy)]
+pub struct Sector {
+    pub radius: f32,
+    pub angle: f32,
+}
+
+/// 判断是否在扇形内
+#[derive(Clone, Copy)]
+pub struct InsideSectorChecker {
+    squared: f32,
+    half: f32,
+}
+
+impl Sector {
+    #[inline]
+    pub fn get_checker(&self) -> InsideSectorChecker {
+        InsideSectorChecker {
+            squared: self.radius.powi(2),
+            half: self.angle * 0.5,
+        }
+    }
+}
+
+impl InsideSectorChecker {
+    #[inline]
+    pub fn contains(&self, p: Point2<f32>) -> bool {
+        p.coords.norm_squared() < self.squared && p[1].atan2(p[0]).abs() < self.half
+    }
+
+    #[inline]
+    pub fn contains_pose(&self, p: Isometry2<f32>) -> bool {
+        self.contains(Point2 {
+            coords: p.translation.vector,
+        }) && p.rotation.angle().abs() < self.half
+    }
+}
+
 /// 任务控制器
 pub struct Tracker {
     repo_path: PathBuf,

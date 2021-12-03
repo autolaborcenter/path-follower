@@ -1,9 +1,9 @@
-﻿use crate::{isometry, point, vector};
-use nalgebra::{Complex, Isometry2, Point2, Vector2};
+﻿use crate::{isometry, path, point, vector, Sector};
+use nalgebra::{Complex, Isometry2, Vector2};
 use std::f32::consts::{FRAC_PI_2, FRAC_PI_4, PI, SQRT_2};
 
 pub(super) struct Path {
-    pub inner: Vec<Vec<Isometry2<f32>>>,
+    pub inner: path::Path,
     index: (usize, usize),
 }
 
@@ -17,29 +17,8 @@ pub(super) enum TrackError {
     Termination,
 }
 
-macro_rules! with_index {
-    ($it:expr) => {
-        $it.iter().enumerate()
-    };
-}
-
-macro_rules! update {
-    ($self:expr, $local:expr, $best:expr, $index:expr, $min:expr) => {
-        let p = $local.translation.vector.norm_squared();
-        let d = $local.rotation.angle().abs();
-
-        if p < $best && d < FRAC_PI_2 {
-            $self.index = $index;
-            return true;
-        } else if p < $min {
-            $self.index = $index;
-            $min = p;
-        }
-    };
-}
-
 impl Path {
-    pub fn new(path: Vec<Vec<Isometry2<f32>>>) -> Self {
+    pub fn new(path: path::Path) -> Self {
         Self {
             inner: path,
             index: (0, 0),
@@ -56,42 +35,21 @@ impl Path {
         search_radius: f32,
         r#loop: bool,
     ) -> bool {
-        // 光斑中心
-        let c = pose * isometry(light_radius, 0.0, 1.0, 0.0);
-        // 到光斑坐标系的变换
-        let to_local = c.inverse();
-
-        let best = light_radius.powi(2);
-        let available = search_radius.powi(2);
-        let mut min = available;
-
-        let ref path = self.inner;
-        let ref local = path[self.index.0];
-
-        // 向后遍历
-        {
-            for (j, p) in with_index!(local).skip(self.index.1) {
-                update!(self, to_local * p, best, (self.index.0, j), min);
-            }
-            for (i, segment) in with_index!(path).skip(self.index.0 + 1) {
-                for (j, p) in with_index!(segment) {
-                    update!(self, to_local * p, best, (i, j), min);
-                }
-            }
+        if let Some(i) = self.inner.relocate(
+            pose,
+            self.index,
+            light_radius,
+            Sector {
+                radius: search_radius,
+                angle: PI,
+            },
+            r#loop,
+        ) {
+            self.index = i;
+            true
+        } else {
+            false
         }
-        // 支持循环时从前遍历
-        if r#loop {
-            for (i, segment) in with_index!(path).take(self.index.0) {
-                for (j, p) in with_index!(segment) {
-                    update!(self, to_local * p, best, (i, j), min);
-                }
-            }
-            for (j, p) in with_index!(local).take(self.index.1) {
-                update!(self, to_local * p, best, (self.index.0, j), min);
-            }
-        }
-
-        return min < available;
     }
 
     /// 在当前路段搜索并产生控制量
@@ -104,7 +62,7 @@ impl Path {
         let squared = light_radius.powi(2);
 
         // 遍历当前路段
-        let first = self.inner[self.index.0]
+        let first = self.inner.0[self.index.0]
             .iter()
             .enumerate()
             .skip(self.index.1)
@@ -114,7 +72,7 @@ impl Path {
         if let Some((j, _)) = first {
             self.index.1 = j;
             Ok(self.size_proportion(Isometry2::new(c, pose.rotation.angle()), squared))
-        } else if self.inner[self.index.0].len() - self.index.1 < 2 {
+        } else if self.inner.0[self.index.0].len() - self.index.1 < 2 {
             Err(TrackError::Termination)
         } else {
             Err(TrackError::OutOfPath)
@@ -123,7 +81,7 @@ impl Path {
 
     /// 尝试加载下一个路段
     pub fn next_segment(&mut self, r#loop: bool) -> bool {
-        if self.index.0 == self.inner.len() - 1 {
+        if self.index.0 == self.inner.0.len() - 1 {
             if !r#loop {
                 return false;
             }
@@ -156,7 +114,8 @@ impl Path {
         // 光斑中心相对机器人的位姿
         let c_light = isometry(light_radius, 0.0, 1.0, 0.0);
         // 机器人坐标系上机器人应该到达的目标位置
-        let target = pose.inverse() * (self.inner[self.index.0][self.index.1] * c_light.inverse());
+        let target =
+            pose.inverse() * (self.inner.0[self.index.0][self.index.1] * c_light.inverse());
 
         let p = target.translation.vector;
         let d = target.rotation.angle();
@@ -185,7 +144,7 @@ impl Path {
 
     /// 计算面积比并转化到 [-π/2, π/2]
     fn size_proportion(&self, c: Isometry2<f32>, squared: f32) -> f32 {
-        let segment = self.inner[self.index.0].as_slice();
+        let segment = self.inner.0[self.index.0].as_slice();
         let to_local = c.inverse();
 
         // 查找路段起点、终点

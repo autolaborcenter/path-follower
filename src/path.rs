@@ -1,10 +1,10 @@
-﻿use crate::{isometry, vector};
+﻿use crate::{isometry, InsideSectorChecker, Sector};
 use async_std::{
     fs::File,
     io::{prelude::BufReadExt, BufReader},
     task,
 };
-use nalgebra::{Isometry2, Vector2};
+use nalgebra::Isometry2;
 
 /// 打开的路径文件
 pub struct PathFile(BufReader<File>);
@@ -33,26 +33,47 @@ impl Iterator for PathFile {
     }
 }
 
+macro_rules! with_index {
+    ($it:expr) => {
+        $it.iter().enumerate()
+    };
+}
+
+macro_rules! update {
+    ($local:expr, $spuared:expr, $index:expr, $result:expr) => {{
+        let p = $local.translation.vector.norm_squared();
+        let d = *$local.rotation.complex();
+        if p < $spuared && d.re.is_sign_positive() {
+            return Some($index);
+        } else if $result.1.contains_pose($local) {
+            $result = (
+                $index,
+                InsideSectorChecker {
+                    squared: p,
+                    ..$result.1
+                },
+            );
+        }
+    }};
+}
+
 impl Path {
     /// 读取一条路径，检测其中的尖点
     pub fn new(
         path: impl IntoIterator<Item = Isometry2<f32>>,
-        light_radius: f32,
+        sector: Sector,
         tip_ignore: usize,
     ) -> Self {
         let mut source = path.into_iter();
         let mut result = vec![vec![]];
         if let Some(r) = source.next() {
-            // 光斑中心位置
-            let c = vector(light_radius, 0.0);
-            // 光斑范围
-            let squared = light_radius.powi(2);
+            let checker = sector.get_checker();
 
             result.last_mut().unwrap().push(r);
             for p in source {
-                // 使用 reference 逆变换，即将这一个点变换到理想的机器人坐标系
+                // 使用上一个点逆变换，即将这一个点变换到理想的机器人坐标系
                 let segment = result.last_mut().unwrap();
-                if is_continious(&segment.last().unwrap().inv_mul(&p), c, squared) {
+                if checker.contains_pose(segment.last().unwrap().inv_mul(&p)) {
                     segment.push(p);
                 } else {
                     // 反向检查，看跳过一些点能否实现连续
@@ -61,7 +82,7 @@ impl Path {
                             .iter()
                             .rev()
                             .take(tip_ignore + 1)
-                            .skip_while(|r| !is_continious(&r.inv_mul(&p), c, squared))
+                            .skip_while(|r| !checker.contains_pose(r.inv_mul(&p)))
                             .count()
                     } else {
                         0
@@ -78,17 +99,58 @@ impl Path {
         Self(result)
     }
 
+    /// 根据序号切片路段
     #[inline]
     pub fn slice<'a>(&'a self, i: (usize, usize)) -> &'a [Isometry2<f32>] {
         &self.0[i.0][i.1..]
     }
-}
 
-#[inline]
-fn is_continious(local: &Isometry2<f32>, c: Vector2<f32>, squared: f32) -> bool {
-    use std::f32::consts::FRAC_PI_3;
-    // 如果这一个点在光斑内 且 与机器人差不多同向
-    // 认为是一般的点
-    (local.translation.vector - c).norm_squared() < squared
-        && local.rotation.angle().abs() < FRAC_PI_3
+    /// 根据当前位姿重定位
+    ///
+    /// 将遍历整个路径，代价极大且计算密集
+    pub fn relocate(
+        &mut self,
+        pose: &Isometry2<f32>,
+        current: (usize, usize),
+        light_radius: f32,
+        search_range: Sector,
+        r#loop: bool,
+    ) -> Option<(usize, usize)> {
+        // 光斑中心
+        let c = pose * isometry(light_radius, 0.0, 1.0, 0.0);
+        // 到光斑坐标系的变换
+        let to_local = c.inverse();
+
+        let best = light_radius.powi(2);
+        let checker = search_range.get_checker();
+        let mut context = (current, checker);
+
+        let ref path = self.0;
+        let ref local = path[0];
+
+        // 向后遍历
+        {
+            for (j, p) in with_index!(local).skip(context.0 .1) {
+                update!(to_local * p, best, (context.0 .0, j), context);
+            }
+            for (i, segment) in with_index!(path).skip(context.0 .0 + 1) {
+                for (j, p) in with_index!(segment) {
+                    update!(to_local * p, best, (i, j), context);
+                }
+            }
+        }
+        // 支持循环时从前遍历
+        if r#loop {
+            for (i, segment) in with_index!(path).take(context.0 .0) {
+                for (j, p) in with_index!(segment) {
+                    update!(to_local * p, best, (i, j), context);
+                }
+            }
+            for (j, p) in with_index!(local).take(context.0 .1) {
+                update!(to_local * p, best, (context.0 .0, j), context);
+            }
+        }
+
+        return Some(context.0).filter(|_| context.1.squared < checker.squared);
+    }
 }

@@ -1,4 +1,6 @@
+use crate::Sector;
 use nalgebra::Isometry2;
+use std::f32::consts::FRAC_PI_3;
 
 mod path;
 
@@ -50,9 +52,14 @@ impl Task {
     pub fn new(path: impl IntoIterator<Item = Isometry2<f32>>, parameters: Parameters) -> Self {
         Self {
             parameters,
-            path: Path::new(
-                crate::Path::new(path, parameters.light_radius, parameters.tip_ignore).0,
-            ),
+            path: Path::new(crate::Path::new(
+                path,
+                Sector {
+                    radius: parameters.light_radius,
+                    angle: 2.0 * FRAC_PI_3,
+                },
+                parameters.tip_ignore,
+            )),
             state: State::Relocating,
         }
     }
@@ -61,7 +68,7 @@ impl Task {
     #[allow(dead_code)]
     #[inline]
     pub fn view<'a>(&'a self) -> &'a Vec<Vec<Isometry2<f32>>> {
-        &self.path.inner
+        &self.path.inner.0
     }
 
     /// 下一次更新时进行重定位
