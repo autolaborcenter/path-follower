@@ -3,9 +3,10 @@ use std::path::PathBuf;
 
 mod path;
 mod task;
+pub mod track;
 
 pub use path::*;
-use task::{record, track, Task};
+use task::{record, Task};
 
 /// 扇形
 #[derive(Clone, Copy)]
@@ -17,8 +18,8 @@ pub struct Sector {
 /// 判断是否在扇形内
 #[derive(Clone, Copy)]
 pub struct InsideSectorChecker {
-    squared: f32,
-    half: f32,
+    pub squared: f32,
+    pub half: f32,
 }
 
 impl Sector {
@@ -90,10 +91,10 @@ impl Tracker {
         path.into()
     }
 
-    fn read_stream(&self, name: &str) -> std::io::Result<track::Task> {
+    fn read_stream(&self, name: &str) -> std::io::Result<task::track::Task> {
         Ok(self.build_absolute(name))
             .and_then(|it| async_std::task::block_on(PathFile::open(it.as_path())))
-            .map(|it| track::Task::new(it, track::Parameters::DEFAULT))
+            .map(|it| task::track::Task::new(it, task::track::Parameters::DEFAULT))
     }
 
     /// 读取指定路径

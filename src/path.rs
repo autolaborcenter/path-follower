@@ -12,6 +12,20 @@ pub struct PathFile(BufReader<File>);
 /// 分段的路径
 pub struct Path(pub Vec<Vec<Isometry2<f32>>>);
 
+pub struct RelocateConfig {
+    pub pose: Isometry2<f32>,
+    pub index: (usize, usize),
+    pub light_radius: f32,
+    pub search_range: Sector,
+    pub r#loop: bool,
+}
+
+pub struct PromoteConfig {
+    pub pose: Isometry2<f32>,
+    pub index: (usize, usize),
+    pub search_range: Sector,
+}
+
 impl PathFile {
     #[inline]
     pub async fn open(path: &async_std::path::Path) -> std::io::Result<Self> {
@@ -108,22 +122,15 @@ impl Path {
     /// 根据当前位姿重定位
     ///
     /// 将遍历整个路径，代价极大且计算密集
-    pub fn relocate(
-        &mut self,
-        pose: &Isometry2<f32>,
-        current: (usize, usize),
-        light_radius: f32,
-        search_range: Sector,
-        r#loop: bool,
-    ) -> Option<(usize, usize)> {
+    pub fn relocate(&self, config: RelocateConfig) -> Option<(usize, usize)> {
         // 光斑中心
-        let c = pose * isometry(light_radius, 0.0, 1.0, 0.0);
+        let c = config.pose * isometry(config.light_radius, 0.0, 1.0, 0.0);
         // 到光斑坐标系的变换
         let to_local = c.inverse();
 
-        let best = light_radius.powi(2);
-        let checker = search_range.get_checker();
-        let mut context = (current, checker);
+        let best = config.light_radius.powi(2);
+        let checker = config.search_range.get_checker();
+        let mut context = (config.index, checker);
 
         let ref path = self.0;
         let ref local = path[0];
@@ -140,7 +147,7 @@ impl Path {
             }
         }
         // 支持循环时从前遍历
-        if r#loop {
+        if config.r#loop {
             for (i, segment) in with_index!(path).take(context.0 .0) {
                 for (j, p) in with_index!(segment) {
                     update!(to_local * p, best, (i, j), context);
@@ -152,5 +159,21 @@ impl Path {
         }
 
         return Some(context.0).filter(|_| context.1.squared < checker.squared);
+    }
+
+    /// 推进循线进度
+    pub fn promote(&self, config: PromoteConfig) -> Option<usize> {
+        let checker = config.search_range.get_checker();
+        let to_local = config.pose.inverse();
+        self.0
+            .get(config.index.0)
+            .map(|v| {
+                v.iter()
+                    .enumerate()
+                    .skip(config.index.1)
+                    .find(|(_, p)| checker.contains_pose(to_local * **p))
+            })
+            .flatten()
+            .map(|(i, _)| i)
     }
 }

@@ -1,4 +1,4 @@
-﻿use crate::{isometry, path, point, vector, Sector};
+﻿use crate::{isometry, path, point, vector, RelocateConfig, Sector};
 use nalgebra::{Complex, Isometry2, Vector2};
 use std::f32::consts::{FRAC_PI_2, FRAC_PI_4, PI, SQRT_2};
 
@@ -35,16 +35,16 @@ impl Path {
         search_radius: f32,
         r#loop: bool,
     ) -> bool {
-        if let Some(i) = self.inner.relocate(
-            pose,
-            self.index,
+        if let Some(i) = self.inner.relocate(RelocateConfig {
+            pose: *pose,
+            index: self.index,
             light_radius,
-            Sector {
+            search_range: Sector {
                 radius: search_radius,
                 angle: PI,
             },
             r#loop,
-        ) {
+        }) {
             self.index = i;
             true
         } else {
