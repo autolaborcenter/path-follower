@@ -1,10 +1,9 @@
-﻿use crate::{isometry, InsideSectorChecker, Sector};
+﻿use crate::{isometry, InsideSectorChecker, Isometry2, Point2, Sector};
 use async_std::{
     fs::File,
     io::{prelude::BufReadExt, BufReader},
     task,
 };
-use nalgebra::Isometry2;
 
 /// 打开的路径文件
 pub struct PathFile(BufReader<File>);
@@ -168,10 +167,14 @@ impl Path {
         self.0
             .get(config.index.0)
             .map(|v| {
-                v.iter()
-                    .enumerate()
-                    .skip(config.index.1)
-                    .find(|(_, p)| checker.contains_pose(to_local * **p))
+                v.iter().enumerate().skip(config.index.1).find(|(_, p)| {
+                    checker.contains(
+                        to_local
+                            * Point2 {
+                                coords: p.translation.vector,
+                            },
+                    )
+                })
             })
             .flatten()
             .map(|(i, _)| i)

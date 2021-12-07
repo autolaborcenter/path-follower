@@ -31,7 +31,7 @@ pub fn track(part: &[Isometry2<f32>], light_radius: f32) -> Option<f32> {
     Some((diff.signum() * PI - diff) / 2.0) // [-π/2, π/2]
 }
 
-pub fn goto(target: Isometry2<f32>, light_radius: f32) -> (f32, f32) {
+pub fn goto(target: Isometry2<f32>, light_radius: f32) -> Option<(f32, f32)> {
     const FRAC_PI_16: f32 = PI / 16.0;
 
     // 退出临界角
@@ -49,7 +49,7 @@ pub fn goto(target: Isometry2<f32>, light_radius: f32) -> (f32, f32) {
     };
 
     // 光斑中心相对机器人的位姿
-    let c_light = isometry(light_radius, 0.0, 1.0, 0.0);
+    let c_light = isometry(-light_radius, 0.0, 1.0, 0.0);
     // 机器人坐标系上机器人应该到达的目标位置
     let target = target * c_light;
 
@@ -61,10 +61,10 @@ pub fn goto(target: Isometry2<f32>, light_radius: f32) -> (f32, f32) {
     if l < squared {
         return if d.abs() < theta {
             // 位置方向条件都满足，退出
-            (0.0, 0.0)
+            None
         } else {
             // 方向条件不满足，原地转
-            (1.0, d.signum() * -FRAC_PI_2)
+            Some((1.0, d.signum() * -FRAC_PI_2))
         };
     }
     // 位置条件不满足，逼近
@@ -72,9 +72,9 @@ pub fn goto(target: Isometry2<f32>, light_radius: f32) -> (f32, f32) {
     let dir = -p[1].atan2(p[0]);
     // 后方不远
     return if p[0] > -1.0 && dir.abs() > FRAC_PI_4 * 3.0 {
-        (p[0].signum() * speed, dir.signum() * PI - dir)
+        Some((p[0].signum() * speed, dir.signum() * PI - dir))
     } else {
-        (speed, dir.clamp(-FRAC_PI_2, FRAC_PI_2))
+        Some((speed, dir.clamp(-FRAC_PI_2, FRAC_PI_2)))
     };
 }
 
