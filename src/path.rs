@@ -1,4 +1,4 @@
-﻿use crate::{isometry, point, InsideSectorChecker, Isometry2, Sector};
+﻿use crate::{isometry, InsideSectorChecker, Isometry2, Sector};
 use async_std::{
     fs::File,
     io::{prelude::BufReadExt, BufReader},
