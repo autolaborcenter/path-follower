@@ -1,4 +1,4 @@
-﻿use crate::{isometry, InsideSectorChecker, Isometry2, Point2, Sector};
+﻿use crate::{isometry, point, InsideSectorChecker, Isometry2, Sector};
 use async_std::{
     fs::File,
     io::{prelude::BufReadExt, BufReader},
@@ -22,7 +22,7 @@ pub struct RelocateConfig {
 pub struct PromoteConfig {
     pub pose: Isometry2<f32>,
     pub index: (usize, usize),
-    pub search_range: Sector,
+    pub light_radius: f32,
 }
 
 impl PathFile {
@@ -162,21 +162,13 @@ impl Path {
 
     /// 推进循线进度
     pub fn promote(&self, config: PromoteConfig) -> Option<usize> {
-        let checker = config.search_range.get_checker();
-        let to_local = config.pose.inverse();
-        self.0
-            .get(config.index.0)
-            .map(|v| {
-                v.iter().enumerate().skip(config.index.1).find(|(_, p)| {
-                    checker.contains(
-                        to_local
-                            * Point2 {
-                                coords: p.translation.vector,
-                            },
-                    )
-                })
-            })
-            .flatten()
+        let c = (config.pose * point(config.light_radius, 0.0)).coords;
+        let squared = config.light_radius.powi(2);
+        self.0[config.index.0]
+            .iter()
+            .enumerate()
+            .skip(config.index.1)
+            .find(|(_, p)| (c - p.translation.vector).norm_squared() < squared)
             .map(|(i, _)| i)
     }
 }

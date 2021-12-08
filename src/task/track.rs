@@ -95,10 +95,9 @@ impl Task {
                     }
                 }
                 State::Initializing => {
-                    use path::InitializeResult::*;
                     match self.path.initialize(pose, self.parameters.light_radius) {
-                        Complete => self.state = State::Tracking,
-                        Drive(dir, value) => return Ok((dir, value)),
+                        Some((dir, value)) => return Ok((dir, value)),
+                        None => self.state = State::Tracking,
                     }
                 }
                 State::Tracking => {

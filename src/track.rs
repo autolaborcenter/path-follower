@@ -1,29 +1,26 @@
 ﻿use crate::{isometry, vector};
 use nalgebra::{Complex, Isometry2, Vector2};
-use std::f32::consts::{FRAC_PI_2, FRAC_PI_4, PI, SQRT_2};
+use std::f32::consts::{FRAC_PI_2, FRAC_PI_4, FRAC_PI_6, PI, SQRT_2};
 
 /// 计算面积比并转化到 [-π/2, π/2]
-pub fn track(part: &[Isometry2<f32>], light_radius: f32) -> Option<f32> {
+pub fn track(mut iter: impl Iterator<Item = Isometry2<f32>>, light_radius: f32) -> Option<f32> {
     let squared = light_radius.powi(2);
     let delta = vector(light_radius, 0.0);
 
     // 查找路段起点、终点
-    let mut begin = part[0];
+    let mut begin = iter.next()?;
     begin.translation.vector -= delta;
     if begin.translation.vector.norm_squared() > squared {
         return None;
     }
-    let end = part
-        .iter()
-        .skip(1)
-        .map(|p| {
-            let mut p = *p;
+    let end = iter
+        .map(|mut p| {
             p.translation.vector -= delta;
             p
         })
         .take_while(|p| p.translation.vector.norm_squared() < squared)
         .last()
-        .unwrap_or(part[0]);
+        .unwrap_or(begin);
 
     let begin = intersection(&begin, squared, -1.0);
     let end = intersection(&end, squared, 1.0);
@@ -32,21 +29,9 @@ pub fn track(part: &[Isometry2<f32>], light_radius: f32) -> Option<f32> {
 }
 
 pub fn goto(target: Isometry2<f32>, light_radius: f32) -> Option<(f32, f32)> {
-    const FRAC_PI_16: f32 = PI / 16.0;
-
     // 退出临界角
     // 目标方向小于此角度时考虑退出
-    let theta = FRAC_PI_16; // assert θ < π/4
-
-    // 原地转安全半径
-    // 目标距离小于此半径且目标方向小于临界角时可退出
-    let squared = {
-        let rho = SQRT_2 * light_radius;
-        let theta = 3.0 * FRAC_PI_4 + theta; // 3π/4 + θ
-        let (sin, cos) = theta.sin_cos();
-        let vec = vector(light_radius + rho * cos, rho * sin);
-        vec.norm_squared() * 0.95 // 略微收缩确保可靠性
-    };
+    const THETA: f32 = FRAC_PI_6; // assert θ < π/4
 
     // 光斑中心相对机器人的位姿
     let c_light = isometry(-light_radius, 0.0, 1.0, 0.0);
@@ -56,10 +41,20 @@ pub fn goto(target: Isometry2<f32>, light_radius: f32) -> Option<(f32, f32)> {
     let p = target.translation.vector;
     let d = target.rotation.angle();
 
+    // 原地转安全半径
+    // 目标距离小于此半径且目标方向小于临界角时可退出
+    let squared = {
+        let rho = SQRT_2 * light_radius;
+        let theta = 3.0 * FRAC_PI_4 + f32::min(THETA, d.abs()); // 3π/4 + θ
+        let (sin, cos) = theta.sin_cos();
+        let vec = vector(light_radius + rho * cos, rho * sin);
+        vec.norm_squared() * 0.95 // 略微收缩确保可靠性
+    };
+
     let l = p.norm_squared();
     // 位置条件满足
     if l < squared {
-        return if d.abs() < theta {
+        return if d.abs() < THETA {
             // 位置方向条件都满足，退出
             None
         } else {
@@ -68,7 +63,7 @@ pub fn goto(target: Isometry2<f32>, light_radius: f32) -> Option<(f32, f32)> {
         };
     }
     // 位置条件不满足，逼近
-    let speed = f32::min(1.0, l.sqrt() * 0.5);
+    let speed = f32::min(1.0, 2.0 * (1.0 - d.abs() / PI) * l.sqrt());
     let dir = -p[1].atan2(p[0]);
     // 后方不远
     return if p[0] > -1.0 && dir.abs() > FRAC_PI_4 * 3.0 {
