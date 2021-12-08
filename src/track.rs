@@ -1,33 +1,43 @@
-﻿use crate::{isometry, vector};
+﻿use crate::{isometry, point, vector};
 use nalgebra::{Complex, Isometry2, Vector2};
 use std::f32::consts::{FRAC_PI_2, FRAC_PI_4, FRAC_PI_6, PI, SQRT_2};
 
 /// 计算面积比并转化到 [-π/2, π/2]
-pub fn track(mut iter: impl Iterator<Item = Isometry2<f32>>, light_radius: f32) -> Option<f32> {
+pub fn track(
+    slice: &[Isometry2<f32>],
+    pose: Isometry2<f32>,
+    light_radius: f32,
+) -> Option<(usize, f32)> {
+    let c = (pose * point(light_radius, 0.0)).coords;
     let squared = light_radius.powi(2);
-    let delta = vector(light_radius, 0.0);
+    let i = slice
+        .iter()
+        .enumerate()
+        .find(|(_, p)| (c - p.translation.vector).norm_squared() < squared)
+        .map(|(i, _)| i)?;
 
     // 查找路段起点、终点
-    let mut begin = iter.next()?;
-    begin.translation.vector -= delta;
-    if begin.translation.vector.norm_squared() > squared {
-        return None;
-    }
-    let end = iter
-        .map(|mut p| {
-            p.translation.vector -= delta;
-            p
-        })
-        .take_while(|p| p.translation.vector.norm_squared() < squared)
+    let local = (pose * isometry(light_radius, 0.0, 1.0, 0.0)).inverse();
+    let begin = local * slice[i];
+    let end = slice
+        .iter()
+        .skip(i)
+        .take_while(|p| (c - p.translation.vector).norm_squared() < squared)
         .last()
-        .unwrap_or(begin);
+        .map_or(begin, |p| local * p);
 
     let begin = intersection(&begin, squared, -1.0);
     let end = intersection(&end, squared, 1.0);
-    let diff = angle_of(end) - angle_of(begin); // [-2π, 2π]
-    Some((diff.signum() * PI - diff) / 2.0) // [-π/2, π/2]
+    Some((i, dir_from_angle(angle_of(end) - angle_of(begin))))
 }
 
+#[inline]
+/// 从表针差转换到方向标量
+pub fn dir_from_angle(diff: f32) -> f32 {
+    (diff.signum() * PI - diff) / 2.0 // [-π/2, π/2]
+}
+
+/// 上目标点
 pub fn goto(target: Isometry2<f32>, light_radius: f32) -> Option<(f32, f32)> {
     // 退出临界角
     // 目标方向小于此角度时考虑退出

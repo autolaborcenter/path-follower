@@ -159,16 +159,4 @@ impl Path {
 
         return Some(context.0).filter(|_| context.1.squared < checker.squared);
     }
-
-    /// 推进循线进度
-    pub fn promote(&self, config: PromoteConfig) -> Option<usize> {
-        let c = (config.pose * point(config.light_radius, 0.0)).coords;
-        let squared = config.light_radius.powi(2);
-        self.0[config.index.0]
-            .iter()
-            .enumerate()
-            .skip(config.index.1)
-            .find(|(_, p)| (c - p.translation.vector).norm_squared() < squared)
-            .map(|(i, _)| i)
-    }
 }
