@@ -15,14 +15,7 @@ impl RecordFile {
             create_dir_all(dir).await?;
         }
         let mut file = File::create(path).await?;
-        writeln!(
-            file,
-            "{},{},{}",
-            pose.translation.vector[0],
-            pose.translation.vector[1],
-            pose.rotation.angle()
-        )
-        .await?;
+        file.write_all(fmt(pose).as_bytes()).await?;
         Ok(Self(file, pose))
     }
 
@@ -35,15 +28,19 @@ impl RecordFile {
         if rho < 0.05 || rho + delta.rotation.angle().abs() / PI * 0.3 < 0.2 {
             Ok(false)
         } else {
+            self.0.write_all(fmt(pose).as_bytes()).await?;
             self.1 = pose.inverse();
-            let text = format!(
-                "{},{},{}",
-                pose.translation.x,
-                pose.translation.y,
-                pose.rotation.angle()
-            );
-            writeln!(self.0, "{}", text).await?;
             Ok(true)
         }
     }
+}
+
+#[inline]
+fn fmt(pose: Isometry2<f32>) -> String {
+    format!(
+        "{},{},{}\n",
+        pose.translation.x,
+        pose.translation.y,
+        pose.rotation.angle()
+    )
 }

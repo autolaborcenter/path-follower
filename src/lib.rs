@@ -10,6 +10,11 @@ pub use record::RecordFile;
 #[derive(Clone)]
 pub struct Tracker<'a> {
     pub path: &'a Path,
+    pub context: TrackContext,
+}
+
+#[derive(Clone)]
+pub struct TrackContext {
     pub parameters: Parameters,
     pub index: (usize, usize),
     pub state: State,
@@ -38,71 +43,73 @@ pub enum Error {
     Complete,         // 任务完成
 }
 
-impl<'a> Tracker<'a> {
-    /// 读取一条路径，检测其中的尖点
-    pub fn new(path: &'a Path, parameters: Parameters) -> Self {
+impl TrackContext {
+    #[inline]
+    pub const fn new(parameters: Parameters) -> Self {
         Self {
-            path,
             parameters,
             index: (0, 0),
             state: State::Relocating,
         }
     }
+}
 
+impl<'a> Tracker<'a> {
     /// 循线
     pub fn track(&mut self, pose: Isometry2<f32>) -> Result<(f32, f32), Error> {
         loop {
-            match self.state {
+            match self.context.state {
                 State::Relocating => {
                     if let Some(index) = self.path.relocate(path::RelocateConfig {
                         pose,
-                        index: self.index,
-                        light_radius: self.parameters.light_radius,
-                        search_range: self.parameters.search_range,
-                        r#loop: self.parameters.r#loop,
+                        index: self.context.index,
+                        light_radius: self.context.parameters.light_radius,
+                        search_range: self.context.parameters.search_range,
+                        r#loop: self.context.parameters.r#loop,
                     }) {
-                        self.index = index;
-                        self.state = State::Initializing;
+                        self.context.index = index;
+                        self.context.state = State::Initializing;
                     } else {
                         return Err(Error::RelocationFailed);
                     }
                 }
                 State::Initializing => {
                     match track::goto(
-                        pose.inv_mul(&self.path.slice(self.index)[0]),
-                        self.parameters.light_radius,
+                        pose.inv_mul(&self.path.slice(self.context.index)[0]),
+                        self.context.parameters.light_radius,
                     ) {
                         Some(next) => return Ok(next),
-                        None => self.state = State::Tracking,
+                        None => self.context.state = State::Tracking,
                     }
                 }
                 State::Tracking => {
                     match track::track(
-                        self.path.slice(self.index),
+                        self.path.slice(self.context.index),
                         pose,
-                        self.parameters.light_radius,
+                        self.context.parameters.light_radius,
                     ) {
                         Some((i, rudder)) => {
-                            self.index.1 += i;
+                            self.context.index.1 += i;
                             return Ok((1.0, rudder));
                         }
                         None => {
-                            if self.path.slice(self.index).len() < 2 {
-                                self.state = if self.index.0 == self.path.0.len() - 1 {
-                                    if !self.parameters.r#loop {
-                                        return Err(Error::Complete);
-                                    }
-                                    self.index.0 = 0;
-                                    self.index.1 = 0;
-                                    State::Relocating
-                                } else {
-                                    self.index.0 += 1;
-                                    self.index.1 = 0;
-                                    State::Initializing
-                                };
+                            if self.path.slice(self.context.index).len() < 2 {
+                                self.context.state =
+                                    if self.context.index.0 == self.path.0.len() - 1 {
+                                        if !self.context.parameters.r#loop {
+                                            return Err(Error::Complete);
+                                        }
+                                        self.context.index.0 = 0;
+                                        self.context.index.1 = 0;
+                                        State::Relocating
+                                    } else {
+                                        self.context.index.0 += 1;
+                                        self.context.index.1 = 0;
+                                        State::Initializing
+                                    };
                             } else {
-                                if self.parameters.auto_reinitialize {
-                                    self.state = State::Initializing;
+                                if self.context.parameters.auto_reinitialize {
+                                    self.context.state = State::Initializing;
                                 } else {
                                     return Err(Error::OutOfPath);
                                 }
