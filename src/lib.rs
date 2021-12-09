@@ -1,10 +1,11 @@
 use nalgebra::{Isometry2, Point2, Vector2};
 
 mod path;
+mod record;
 mod track;
 
-pub use path::*;
-pub use track::dir_from_angle;
+pub use path::{Path, PathFile};
+pub use record::RecordFile;
 
 #[derive(Clone)]
 pub struct Tracker<'a> {
@@ -53,7 +54,7 @@ impl<'a> Tracker<'a> {
         loop {
             match self.state {
                 State::Relocating => {
-                    if let Some(index) = self.path.relocate(RelocateConfig {
+                    if let Some(index) = self.path.relocate(path::RelocateConfig {
                         pose,
                         index: self.index,
                         light_radius: self.parameters.light_radius,

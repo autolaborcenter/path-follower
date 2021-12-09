@@ -3,7 +3,7 @@ use nalgebra::{Complex, Isometry2, Vector2};
 use std::f32::consts::{FRAC_PI_2, FRAC_PI_4, FRAC_PI_6, PI, SQRT_2};
 
 /// 计算面积比并转化到 [-π/2, π/2]
-pub fn track(
+pub(crate) fn track(
     slice: &[Isometry2<f32>],
     pose: Isometry2<f32>,
     light_radius: f32,
@@ -28,17 +28,12 @@ pub fn track(
 
     let begin = intersection(&begin, squared, -1.0);
     let end = intersection(&end, squared, 1.0);
-    Some((i, dir_from_angle(angle_of(end) - angle_of(begin))))
-}
-
-#[inline]
-/// 从表针差转换到方向标量
-pub fn dir_from_angle(diff: f32) -> f32 {
-    (diff.signum() * PI - diff) / 2.0 // [-π/2, π/2]
+    let diff = angle_of(end) - angle_of(begin);
+    Some((i, (diff.signum() * PI - diff) / 2.0)) // [-π/2, π/2]
 }
 
 /// 上目标点
-pub fn goto(target: Isometry2<f32>, light_radius: f32) -> Option<(f32, f32)> {
+pub(crate) fn goto(target: Isometry2<f32>, light_radius: f32) -> Option<(f32, f32)> {
     // 退出临界角
     // 目标方向小于此角度时考虑退出
     const THETA: f32 = FRAC_PI_6; // assert θ < π/4

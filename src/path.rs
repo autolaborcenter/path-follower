@@ -11,18 +11,12 @@ pub struct PathFile(BufReader<File>);
 /// 分段的路径
 pub struct Path(pub Vec<Vec<Isometry2<f32>>>);
 
-pub struct RelocateConfig {
+pub(crate) struct RelocateConfig {
     pub pose: Isometry2<f32>,
     pub index: (usize, usize),
     pub light_radius: f32,
     pub search_range: Sector,
     pub r#loop: bool,
-}
-
-pub struct PromoteConfig {
-    pub pose: Isometry2<f32>,
-    pub index: (usize, usize),
-    pub light_radius: f32,
 }
 
 impl PathFile {
@@ -121,7 +115,7 @@ impl Path {
     /// 根据当前位姿重定位
     ///
     /// 将遍历整个路径，代价极大且计算密集
-    pub fn relocate(&self, config: RelocateConfig) -> Option<(usize, usize)> {
+    pub(crate) fn relocate(&self, config: RelocateConfig) -> Option<(usize, usize)> {
         // 光斑中心
         let c = config.pose * isometry(config.light_radius, 0.0, 1.0, 0.0);
         // 到光斑坐标系的变换
