@@ -73,8 +73,9 @@ pub fn goto(target: Isometry2<f32>, light_radius: f32) -> Option<(f32, f32)> {
         };
     }
     // 位置条件不满足，逼近
-    let speed = f32::min(1.0, 2.0 * (1.0 - d.abs() / PI) * l.sqrt());
-    let dir = -p[1].atan2(p[0]);
+    let l = l.sqrt();
+    let speed = f32::min(1.0, 2.0 * (1.0 - d.abs() / PI) * l);
+    let dir = -p[1].atan2(p[0]) / l;
     // 后方不远
     return if p[0] > -1.0 && dir.abs() > FRAC_PI_4 * 3.0 {
         Some((p[0].signum() * speed, dir.signum() * PI - dir))
