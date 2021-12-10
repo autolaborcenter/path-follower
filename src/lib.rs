@@ -148,15 +148,8 @@ impl Sector {
 
 impl InsideSectorChecker {
     #[inline]
-    pub fn contains(&self, p: Point2<f32>) -> bool {
-        p.coords.norm_squared() < self.squared && p[1].atan2(p[0]).abs() < self.half
-    }
-
-    #[inline]
-    pub fn contains_pose(&self, p: Isometry2<f32>) -> bool {
-        self.contains(Point2 {
-            coords: p.translation.vector,
-        }) && p.rotation.angle().abs() < self.half
+    pub fn contains(&self, p: Vector2<f32>) -> bool {
+        p.norm_squared() < self.squared && p[1].atan2(p[0]).abs() < self.half
     }
 }
 

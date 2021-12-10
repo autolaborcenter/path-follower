@@ -52,7 +52,7 @@ macro_rules! update {
         let d = *$local.rotation.complex();
         if p < $spuared && d.re.is_sign_positive() {
             return Some($index);
-        } else if $result.1.contains_pose($local) {
+        } else if $result.1.contains($local.translation.vector) {
             $result = (
                 $index,
                 InsideSectorChecker {
@@ -80,7 +80,7 @@ impl Path {
             for p in source {
                 // 使用上一个点逆变换，即将这一个点变换到理想的机器人坐标系
                 let segment = result.last_mut().unwrap();
-                if checker.contains_pose(segment.last().unwrap().inv_mul(&p)) {
+                if checker.contains(segment.last().unwrap().inv_mul(&p).translation.vector) {
                     segment.push(p);
                 } else {
                     // 反向检查，看跳过一些点能否实现连续
@@ -89,7 +89,7 @@ impl Path {
                             .iter()
                             .rev()
                             .take(tip_ignore + 1)
-                            .skip_while(|r| !checker.contains_pose(r.inv_mul(&p)))
+                            .skip_while(|r| !checker.contains(r.inv_mul(&p).translation.vector))
                             .count()
                     } else {
                         0
