@@ -13,6 +13,7 @@ pub(crate) fn track(
     let i = slice
         .iter()
         .enumerate()
+        .take(20)
         .find(|(_, p)| (c - p.translation.vector).norm_squared() < squared)
         .map(|(i, _)| i)?;
 
@@ -53,7 +54,7 @@ pub(crate) fn goto(target: Isometry2<f32>, light_radius: f32) -> Option<(f32, f3
         let theta = 3.0 * FRAC_PI_4 + f32::min(THETA, d.abs()); // 3π/4 + θ
         let (sin, cos) = theta.sin_cos();
         let vec = vector(light_radius + rho * cos, rho * sin);
-        vec.norm_squared() * 0.95 // 略微收缩确保可靠性
+        vec.norm_squared() * 0.9 // 略微收缩以规避运算误差
     };
 
     let l = p.norm_squared();
@@ -68,15 +69,17 @@ pub(crate) fn goto(target: Isometry2<f32>, light_radius: f32) -> Option<(f32, f3
         };
     }
     // 位置条件不满足，逼近
-    let l = l.sqrt();
-    let mut speed = f32::min(1.0, (2.0 - d.abs() / PI) * l);
+    let mut speed = f32::min(1.0, (2.0 - d.abs() / PI) * l.sqrt());
     let mut dir = -p[1].atan2(p[0]);
     // 后方不远
-    if p[0] > -1.0 && dir.abs() > FRAC_PI_4 * 3.0 {
+    if p[0] > -0.6 && dir.abs() > FRAC_PI_4 * 3.0 {
         speed *= p[0].signum();
         dir = dir.signum() * PI - dir
     }
-    Some((speed, dir.clamp(-FRAC_PI_2, FRAC_PI_2) / f32::max(1.0, l)))
+    Some((
+        speed,
+        dir.clamp(-FRAC_PI_2, FRAC_PI_2) / f32::max(1.0, p[0]),
+    ))
 }
 
 /// 求射线与圆交点
