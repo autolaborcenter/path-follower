@@ -60,7 +60,9 @@ pub(crate) fn goto(target: Isometry2<f32>, light_radius: f32) -> Option<(f32, f3
     let l = p.norm_squared();
     // 位置条件满足
     if l < squared {
-        return if d.abs() < THETA {
+        return if (p[1].is_sign_positive() && d.is_sign_negative() && -THETA < d)
+            || (p[1].is_sign_negative() && d.is_sign_positive() && d < THETA)
+        {
             // 位置方向条件都满足，退出
             None
         } else {
