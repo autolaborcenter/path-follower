@@ -74,7 +74,7 @@ pub(crate) fn goto(target: Isometry2<f32>, light_radius: f32) -> Option<(f32, f3
     let mut speed = f32::min(1.0, (2.0 - d.abs() / PI) * l.sqrt());
     let mut dir = -p[1].atan2(p[0]);
     // 后方不远
-    if p[0] > -0.6 && dir.abs() > FRAC_PI_4 * 3.0 {
+    if p[0] > -light_radius * 0.5 && dir.abs() > FRAC_PI_4 * 3.0 {
         speed *= p[0].signum();
         dir = dir.signum() * PI - dir
     }
