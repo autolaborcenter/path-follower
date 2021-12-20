@@ -1,6 +1,6 @@
-﻿use crate::{isometry, point, vector};
-use nalgebra::{Complex, Isometry2, Vector2};
-use std::f32::consts::{FRAC_PI_2, FRAC_PI_4, FRAC_PI_6, PI, SQRT_2};
+﻿use crate::{isometry, point, vector, Isometry2, Vector2};
+use nalgebra::Complex;
+use std::f32::consts::{FRAC_PI_2, FRAC_PI_3, FRAC_PI_4, PI};
 
 /// 计算面积比并转化到 [-π/2, π/2]
 pub(crate) fn track(
@@ -35,53 +35,39 @@ pub(crate) fn track(
 
 /// 上目标点
 pub(crate) fn goto(target: Isometry2<f32>, light_radius: f32) -> Option<(f32, f32)> {
-    // 退出临界角
-    // 目标方向小于此角度时考虑退出
-    const THETA: f32 = FRAC_PI_6; // assert θ < π/4
-
-    // 光斑中心相对机器人的位姿
-    let c_light = isometry(-light_radius, 0.0, 1.0, 0.0);
     // 机器人坐标系上机器人应该到达的目标位置
-    let target = target * c_light;
+    let target = target * isometry(-light_radius, 0.0, 1.0, 0.0);
 
     let p = target.translation.vector;
     let d = target.rotation.angle();
 
-    // 原地转安全半径
-    // 目标距离小于此半径且目标方向小于临界角时可退出
-    let squared = {
-        let rho = SQRT_2 * light_radius;
-        let theta = 3.0 * FRAC_PI_4 + f32::min(THETA, d.abs()); // 3π/4 + θ
-        let (sin, cos) = theta.sin_cos();
-        let vec = vector(light_radius + rho * cos, rho * sin);
-        vec.norm_squared() * 0.9 // 略微收缩以规避运算误差
-    };
-
     let l = p.norm_squared();
     // 位置条件满足
-    if l < squared {
-        return if (p[1].is_sign_positive() && d.is_sign_negative() && -THETA < d)
-            || (p[1].is_sign_negative() && d.is_sign_positive() && d < THETA)
+    if l < light_radius.powi(2) {
+        // 转到面朝线
+        if (p[1].is_sign_positive() && d.is_sign_negative() && -FRAC_PI_3 < d)
+            || (p[1].is_sign_negative() && d.is_sign_positive() && d < FRAC_PI_3)
         {
             // 位置方向条件都满足，退出
             None
         } else {
             // 方向条件不满足，原地转
             Some((1.0, d.signum() * -FRAC_PI_2))
-        };
+        }
+    } else {
+        // 位置条件不满足，逼近
+        let mut speed = f32::min(1.0, (2.0 - d.abs() / PI) * l.sqrt());
+        let mut dir = -p[1].atan2(p[0]);
+        // 后方不远
+        if p[0] > -light_radius * 0.5 && dir.abs() > FRAC_PI_4 * 3.0 {
+            speed *= p[0].signum();
+            dir = dir.signum() * PI - dir
+        }
+        Some((
+            speed,
+            dir.clamp(-FRAC_PI_2, FRAC_PI_2) / f32::max(1.0, p[0]),
+        ))
     }
-    // 位置条件不满足，逼近
-    let mut speed = f32::min(1.0, (2.0 - d.abs() / PI) * l.sqrt());
-    let mut dir = -p[1].atan2(p[0]);
-    // 后方不远
-    if p[0] > -light_radius * 0.5 && dir.abs() > FRAC_PI_4 * 3.0 {
-        speed *= p[0].signum();
-        dir = dir.signum() * PI - dir
-    }
-    Some((
-        speed,
-        dir.clamp(-FRAC_PI_2, FRAC_PI_2) / f32::max(1.0, p[0]),
-    ))
 }
 
 /// 求射线与圆交点
