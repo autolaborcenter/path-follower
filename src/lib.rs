@@ -75,7 +75,8 @@ impl<'a> Tracker<'a> {
                 }
                 State::Initializing => {
                     match track::goto(
-                        pose.inv_mul(&self.path.slice(self.context.index)[0]),
+                        self.path.slice(self.context.index),
+                        pose,
                         self.context.parameters.light_radius,
                     ) {
                         Some(next) => return Ok(next),
