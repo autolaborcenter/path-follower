@@ -44,19 +44,17 @@ pub(crate) fn goto(
     let p = target.translation.vector.normalize();
     let d = dir_vector(&target);
     // 夹角 < 60°
-    let p = if p.dot(&d) > 0.5 {
-        target.translation.vector - p * light_radius
+    let (p, d) = if (p[1] * d[1]).is_sign_negative() && p.dot(&d) > 0.5 {
+        (target.translation.vector - p * light_radius, p)
     } else {
-        (target * point(-light_radius, 0.0)).coords
+        ((target * point(-light_radius, 0.0)).coords, d)
     };
-
     // 计算位置目标
-    let d = d[1].atan2(d[0]);
     let l = p.norm_squared();
     // 位置条件满足
     if l < squared {
         // 转到面朝线
-        if (p[1] * d).is_sign_negative() && {
+        if (p[1] * d[1]).is_sign_negative() && {
             // 计算方向目标
             let target = (pose * isometry(light_radius, 0.0, 1.0, 0.0)).inv_mul(&slice[0]);
             let l = target.translation.vector.norm_squared();
@@ -66,12 +64,12 @@ pub(crate) fn goto(
             None
         } else {
             // 方向条件不满足，原地转
-            Some((1.0, d.signum() * -FRAC_PI_2))
+            Some((1.0, d[1].signum() * -FRAC_PI_2))
         }
     }
     // 位置条件不满足，逼近
     else {
-        let mut speed = f32::min(1.0, (2.0 - d.abs() / PI) * l.sqrt());
+        let mut speed = f32::min(1.0, (2.0 - d[1].atan2(d[0]).abs() / PI) * l.sqrt());
         let mut dir = -p[1].atan2(p[0]);
         // 后方不远
         if p[0] > -0.6 && dir.abs() > FRAC_PI_4 * 3.0 {
