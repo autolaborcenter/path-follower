@@ -13,7 +13,7 @@ pub(crate) fn track(
     let i = slice
         .iter()
         .enumerate()
-        .take(20)
+        .take(10)
         .find(|(_, p)| (c - p.translation.vector).norm_squared() < squared)
         .map(|(i, _)| i)?;
     // 查找路段起点、终点
@@ -28,7 +28,7 @@ pub(crate) fn track(
 
     let begin = intersection(&begin, squared, -1.0);
     let end = intersection(&end, squared, 1.0);
-    let diff = angle_of(end) - angle_of(begin);
+    let diff = end[1].atan2(end[0]) - begin[1].atan2(begin[0]);
     Some((i, (diff.signum() * PI - diff) / 2.0)) // [-π/2, π/2]
 }
 
@@ -39,10 +39,19 @@ pub(crate) fn goto(
     light_radius: f32,
 ) -> Option<(f32, f32)> {
     let squared = light_radius.powi(2);
+    // 目标点移动到机器人坐标系
+    let target = pose.inv_mul(unsafe { slice.get_unchecked(0) });
+    let p = target.translation.vector.normalize();
+    let d = dir_vector(&target);
+    // 夹角 < 60°
+    let p = if p.dot(&d) > 0.5 {
+        target.translation.vector - p * light_radius
+    } else {
+        (target * point(-light_radius, 0.0)).coords
+    };
+
     // 计算位置目标
-    let target = pose.inv_mul(&slice[0]) * isometry(-light_radius, 0.0, 1.0, 0.0);
-    let p = target.translation.vector;
-    let d = target.rotation.angle();
+    let d = d[1].atan2(d[0]);
     let l = p.norm_squared();
     // 位置条件满足
     if l < squared {
@@ -96,10 +105,4 @@ fn intersection(p: &Isometry2<f32>, r_squared: f32, signnum: f32) -> Vector2<f32
 fn dir_vector(p: &Isometry2<f32>) -> Vector2<f32> {
     let Complex { re, im } = *p.rotation.complex();
     vector(re, im)
-}
-
-/// 求方向角
-#[inline]
-fn angle_of(p: Vector2<f32>) -> f32 {
-    p.y.atan2(p.x)
 }

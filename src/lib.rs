@@ -22,10 +22,9 @@ pub struct TrackContext {
 
 #[derive(Clone, Copy)]
 pub struct Parameters {
-    pub search_range: Sector,    // 搜索范围
-    pub light_radius: f32,       // 光斑半径
-    pub r#loop: bool,            // 是否启动循环
-    pub auto_reinitialize: bool, // 离开路径是否自动恢复
+    pub search_range: Sector, // 搜索范围
+    pub light_radius: f32,    // 光斑半径
+    pub r#loop: bool,         // 是否启动循环
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -39,7 +38,6 @@ pub enum State {
 #[derive(Debug)]
 pub enum Error {
     RelocationFailed, // 搜索失败
-    OutOfPath,        // 丢失路径
     Complete,         // 任务完成
 }
 
@@ -109,11 +107,7 @@ impl<'a> Tracker<'a> {
                                         State::Initializing
                                     };
                             } else {
-                                if self.context.parameters.auto_reinitialize {
-                                    self.context.state = State::Initializing;
-                                } else {
-                                    return Err(Error::OutOfPath);
-                                }
+                                self.context.state = State::Initializing;
                             }
                         }
                     }
