@@ -56,9 +56,8 @@ pub(crate) fn goto(
         // 转到面朝线
         if (p[1] * d[1]).is_sign_negative() && {
             // 计算方向目标
-            let target = (pose * isometry(light_radius, 0.0, 1.0, 0.0)).inv_mul(&slice[0]);
-            let l = target.translation.vector.norm_squared();
-            l < squared
+            let c = (pose * point(light_radius, 0.0)).coords;
+            (c - unsafe { slice.get_unchecked(0) }.translation.vector).norm_squared() < squared
         } {
             // 位置方向条件都满足，退出
             None
